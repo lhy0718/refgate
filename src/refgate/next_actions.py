@@ -451,3 +451,62 @@ def summarize_next_action_manifests(paths: list[str | Path]) -> dict[str, Any]:
         "remaining_actions": remaining_actions,
         "manifests": manifests,
     }
+
+
+def render_next_action_summary_markdown(summary: dict[str, Any]) -> str:
+    lines = [
+        "# Refgate Next-Action Summary",
+        "",
+        f"- Status: {'pass' if summary.get('ok') else 'needs action'}",
+        f"- Manifests: {summary.get('manifest_count', 0)}",
+        f"- Actions: {summary.get('action_count', 0)}",
+        f"- Remaining: {summary.get('remaining_count', 0)}",
+        f"- Failed: {summary.get('failed_count', 0)}",
+    ]
+
+    status_counts = summary.get("status_counts") or {}
+    if status_counts:
+        lines.extend(["", "## Status Counts"])
+        for status, count in sorted(status_counts.items()):
+            lines.append(f"- `{status}`: {count}")
+
+    recommended = summary.get("recommended_next") or {}
+    if recommended and recommended.get("status") != "none":
+        lines.extend(["", "## Recommended Next"])
+        if recommended.get("code"):
+            lines.append(f"- Code: `{recommended.get('code')}`")
+        if recommended.get("action_summary"):
+            lines.append(f"- Action: {recommended.get('action_summary')}")
+        if recommended.get("skip_reason"):
+            lines.append(f"- Blocker: `{recommended.get('skip_reason')}`")
+        if recommended.get("hint"):
+            lines.append(f"- Hint: {recommended.get('hint')}")
+        if recommended.get("command"):
+            lines.extend(["", "```bash", str(recommended.get("command")), "```"])
+
+    remaining = summary.get("remaining_actions") or []
+    if remaining:
+        lines.extend(["", "## Remaining Actions"])
+        for action in remaining:
+            title_parts = [str(action.get("status") or "pending")]
+            if action.get("code"):
+                title_parts.append(str(action.get("code")))
+            if action.get("citation_key"):
+                title_parts.append(str(action.get("citation_key")))
+            lines.append(f"- {' / '.join(title_parts)}")
+            if action.get("action_summary"):
+                lines.append(f"  - Action: {action.get('action_summary')}")
+            if action.get("agent_hint"):
+                lines.append(f"  - Hint: {action.get('agent_hint')}")
+            if action.get("command"):
+                lines.append(f"  - Command: `{action.get('command')}`")
+
+    failed = summary.get("failed_actions") or []
+    if failed:
+        lines.extend(["", "## Failed Actions"])
+        for action in failed:
+            lines.append(f"- `{action.get('code', '')}` returncode={action.get('returncode')}")
+            if action.get("command"):
+                lines.append(f"  - Command: `{action.get('command')}`")
+
+    return "\n".join(lines).rstrip() + "\n"

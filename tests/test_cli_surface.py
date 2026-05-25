@@ -885,6 +885,47 @@ def test_cli_run_summary_reports_remaining_actions(tmp_path, capsys):
     assert payload["data"]["recommended_next"]["command"]
 
 
+def test_cli_run_summary_writes_markdown_report(tmp_path, capsys):
+    manifest = tmp_path / "next_plan.json"
+    markdown = tmp_path / "next_summary.md"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "refgate.next_actions.v1",
+                "ok": True,
+                "execute": False,
+                "selected_count": 0,
+                "failed_count": 0,
+                "actions": [
+                    {
+                        "index": 0,
+                        "selected": False,
+                        "skip_reason": "writes_files",
+                        "code": "RESOLVE_REFERENCE_PROVENANCE",
+                        "kind": "reference_provenance",
+                        "action_summary": "Resolve unresolved bibliography entries.",
+                        "agent_hint": "Enable --allow-writes only when file updates are intended.",
+                        "writes_files": True,
+                        "command": "python -m refgate resolver-assist --lock refgate.lock.json --json",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["run-summary", "--input", str(manifest), "--markdown", str(markdown), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    report = markdown.read_text(encoding="utf-8")
+    assert exit_code == 1
+    assert payload["status"] == "next_action_summary"
+    assert "# Refgate Next-Action Summary" in report
+    assert "RESOLVE_REFERENCE_PROVENANCE" in report
+    assert "Enable --allow-writes" in report
+    assert "python -m refgate resolver-assist" in report
+
+
 def test_cli_run_summary_keeps_compact_source_guidance(tmp_path, capsys):
     manifest = tmp_path / "next_plan.json"
     manifest.write_text(

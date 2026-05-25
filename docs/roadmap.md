@@ -62,6 +62,7 @@ become the source of truth.
 - `run-next` support for both raw command JSON responses and saved
   `next_actions` plan manifests
 - Agent-friendly `run-next` hints and top-level recommended next command
+- Markdown `run-summary` output for human review of agent next-action loops
 - Deterministic claim/evidence consistency review
 - Deterministic over-strong claim wording warning in claim/evidence review
 - Source bundle evidence suggestion across multiple reviewed text/PDF inputs

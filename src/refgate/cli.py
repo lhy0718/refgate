@@ -22,7 +22,13 @@ from .handoff import write_handoff
 from .live_smoke import cache_manifest, compare_cache_manifest, run_live_smoke, run_live_smoke_suite
 from .lockfile import build_lock_entry, load_lockfile, merge_lock_entry, write_lockfile
 from .models import AuditIssue, AuthorityRecord, BibtexRecord, CandidateRecord, Lockfile, PaperQuery, ResolverDecision
-from .next_actions import build_next_actions_result, run_next_actions, summarize_next_action_manifests, write_next_actions_result
+from .next_actions import (
+    build_next_actions_result,
+    render_next_action_summary_markdown,
+    run_next_actions,
+    summarize_next_action_manifests,
+    write_next_actions_result,
+)
 from .official_monitor import OFFICIAL_MONITOR_SOURCES, run_official_monitor
 from .paper_template import write_paper_agents_template
 from .paper_flow import build_source_map_from_dir, run_paper_audit
@@ -825,6 +831,10 @@ def cmd_run_next(args: argparse.Namespace) -> int:
 
 def cmd_run_summary(args: argparse.Namespace) -> int:
     result = summarize_next_action_manifests(args.input)
+    if args.markdown:
+        target = Path(args.markdown)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(render_next_action_summary_markdown(result), encoding="utf-8")
     write_json(
         envelope(
             "next_action_summary",
@@ -1392,6 +1402,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_summary_parser = subparsers.add_parser("run-summary")
     run_summary_parser.add_argument("--input", action="append", required=True)
+    run_summary_parser.add_argument("--markdown")
     run_summary_parser.add_argument("--json", action="store_true")
     run_summary_parser.set_defaults(func=cmd_run_summary)
 

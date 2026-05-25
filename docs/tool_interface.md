@@ -87,7 +87,8 @@ Publisher-specific reference actions also retain compact `action_summary`,
 `run-summary` output.
 `run-summary --input PLAN.json --input RUN.json --json` reads those manifests
 and reports only remaining actions: failed commands, skipped actions, or
-planned actions that have not yet been executed.
+planned actions that have not yet been executed. Add `--markdown SUMMARY.md`
+to write a compact human-reviewable summary alongside the JSON response.
 
 Network-backed tools should accept fixture or cached raw responses during tests.
 Live checks are opt-in and must not run in the default validation suite.
