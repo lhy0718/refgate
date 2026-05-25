@@ -1,0 +1,41 @@
+name: refgate-paper-audit
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  refgate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Refgate
+        run: python -m pip install git+https://github.com/lhy0718/refgate.git
+      - name: Prepare artifact directory
+        run: mkdir -p .refgate
+      - name: Run paper audit
+        run: >
+          refgate paper-audit
+          --tex paper.tex
+          --bib references.bib
+          --lock refgate.lock.json
+          --claims refgate_claims.tsv
+          --report refgate_audit.md
+          --resolver-output refgate_queries.json
+          --next-plan-output .refgate/next_plan.json
+          --submission
+          --json
+      - name: Upload Refgate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refgate-audit
+          path: |
+            refgate.lock.json
+            refgate_claims.tsv
+            refgate_audit.md
+            refgate_queries.json
+            .refgate/next_plan.json

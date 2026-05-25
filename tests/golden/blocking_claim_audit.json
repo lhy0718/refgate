@@ -1,0 +1,13 @@
+{
+  "blocking_issues": [
+    {
+      "citation_key": "debenedetti2024agentdojo",
+      "code": "CLAIM_NOT_CHECKED",
+      "evidence": [],
+      "message": "Claim c1 is marked claim_unchecked.",
+      "severity": "blocking"
+    }
+  ],
+  "ok": false,
+  "warnings": []
+}

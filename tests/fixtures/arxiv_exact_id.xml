@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2601.00001v2</id>
+    <updated>2026-01-08T12:00:00Z</updated>
+    <published>2026-01-01T12:00:00Z</published>
+    <title>
+      Refgate Fixture: Deterministic Reference Gates for Manuscripts
+    </title>
+    <summary>A fixture-only preprint record for adapter tests.</summary>
+    <author>
+      <name>Ada Smith</name>
+    </author>
+    <author>
+      <name>Byron Lee</name>
+    </author>
+    <arxiv:primary_category term="cs.DL" />
+    <category term="cs.DL" />
+    <link href="http://arxiv.org/abs/2601.00001v2" rel="alternate" type="text/html" />
+    <link title="pdf" href="http://arxiv.org/pdf/2601.00001v2" rel="related" type="application/pdf" />
+  </entry>
+</feed>

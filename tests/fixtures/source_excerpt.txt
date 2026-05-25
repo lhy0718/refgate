@@ -1,0 +1,5 @@
+AgentDojo introduces a benchmark for evaluating agents under prompt injection attacks. The benchmark separates user tasks from hidden adversarial instructions and reports results for multiple agent defenses.
+
+The paper argues that tool-use agents can fail when an untrusted instruction is mixed into the context. Its experiments compare defenses under controlled task settings.
+
+Refgate verifies references by checking citation metadata, provenance, and source evidence before a bibliography is treated as ready.

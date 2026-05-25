@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2601.00001v1</id>
+    <updated>2026-01-01T12:00:00Z</updated>
+    <published>2026-01-01T12:00:00Z</published>
+    <title>
+      Refgate Fixture: Deterministic Reference Gates for Manuscripts
+    </title>
+    <summary>A fixture-only title-search record without final venue metadata.</summary>
+    <author>
+      <name>Ada Smith</name>
+    </author>
+    <arxiv:primary_category term="cs.DL" />
+    <category term="cs.DL" />
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2601.00002v1</id>
+    <updated>2026-01-02T12:00:00Z</updated>
+    <published>2026-01-02T12:00:00Z</published>
+    <title>Refgate Fixture: Deterministic Reference Gates for Datasets</title>
+    <summary>A near-title distractor that must not pass normalized-title confirmation.</summary>
+    <author>
+      <name>Ada Smith</name>
+    </author>
+    <arxiv:primary_category term="cs.DL" />
+    <category term="cs.DL" />
+  </entry>
+</feed>

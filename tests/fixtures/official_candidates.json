@@ -1,0 +1,23 @@
+[
+  {
+    "source": "neurips",
+    "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+    "authors": ["Edoardo Debenedetti"],
+    "year": 2024,
+    "venue": "NeurIPS",
+    "url": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/example-Abstract-Conference.html",
+    "is_official_record": true,
+    "bibtex_url": "https://proceedings.neurips.cc/paper_files/paper/23699-/bibtex",
+    "source_priority": 1
+  },
+  {
+    "source": "semantic_scholar",
+    "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+    "authors": ["Edoardo Debenedetti"],
+    "year": 2024,
+    "venue": "NeurIPS",
+    "url": "https://www.semanticscholar.org/paper/example",
+    "is_official_record": false,
+    "source_priority": 4
+  }
+]

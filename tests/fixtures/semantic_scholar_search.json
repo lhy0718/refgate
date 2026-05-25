@@ -1,0 +1,17 @@
+{
+  "total": 1,
+  "data": [
+    {
+      "paperId": "fixture-s2-paper",
+      "title": "Refgate Fixture: Discovery Only Record",
+      "authors": [{"name": "Ada Smith"}],
+      "year": 2026,
+      "venue": "FixtureConf",
+      "externalIds": {
+        "DOI": "10.5555/refgate.discovery",
+        "ArXiv": "2601.00003"
+      },
+      "url": "https://www.semanticscholar.org/paper/fixture-s2-paper"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "status": "ok",
+  "message": {
+    "DOI": "10.5555/refgate.fixture",
+    "URL": "https://doi.org/10.5555/refgate.fixture",
+    "title": ["Refgate Fixture: DOI Metadata Verification"],
+    "author": [
+      {"given": "Ada", "family": "Smith"},
+      {"given": "Byron", "family": "Lee"}
+    ],
+    "container-title": ["Journal of Reproducible References"],
+    "published-print": {"date-parts": [[2026, 5, 19]]},
+    "type": "journal-article",
+    "publisher": "Fixture Publisher",
+    "reference-count": 12
+  }
+}

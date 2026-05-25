@@ -1,0 +1,116 @@
+[
+  {
+    "query_id": "agentdojo",
+    "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+    "authors": [
+      "Edoardo Debenedetti"
+    ],
+    "year": 2024,
+    "citation_key": "debenedetti2024agentdojo",
+    "preferred_venues": [
+      "NeurIPS"
+    ]
+  },
+  {
+    "query_id": "asb",
+    "title": "Agent Security Bench (ASB): Formalizing and Benchmarking Attacks and Defenses in LLM-based Agents",
+    "authors": [
+      "Hanrong Zhang"
+    ],
+    "year": 2024,
+    "citation_key": "fixture2026asb",
+    "arxiv_id": "2410.02644"
+  },
+  {
+    "query_id": "toolemu",
+    "title": "Identifying the Risks of LM Agents with an LM-Emulated Sandbox",
+    "authors": [
+      "Yangjun Ruan"
+    ],
+    "year": 2024,
+    "arxiv_id": "2309.15817",
+    "citation_key": "ruan2023toolemu",
+    "preferred_venues": [
+      "ICLR"
+    ]
+  },
+  {
+    "query_id": "tensor-trust",
+    "title": "Tensor Trust: Interpretable Prompt Injection Attacks from an Online Game",
+    "authors": [
+      "Sam Toyer"
+    ],
+    "year": 2024,
+    "citation_key": "toyer2024tensor",
+    "preferred_venues": [
+      "ICLR"
+    ]
+  },
+  {
+    "query_id": "injecagent",
+    "title": "InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents",
+    "authors": [
+      "Qiusi Zhan"
+    ],
+    "year": 2024,
+    "citation_key": "zhan2024injecagent",
+    "preferred_venues": [
+      "ACL"
+    ]
+  },
+  {
+    "query_id": "webarena",
+    "title": "WebArena: A Realistic Web Environment for Building Autonomous Agents",
+    "authors": [
+      "Shuyan Zhou"
+    ],
+    "year": 2024,
+    "citation_key": "zhou2024webarena",
+    "preferred_venues": [
+      "ICLR"
+    ]
+  },
+  {
+    "query_id": "appworld",
+    "title": "AppWorld: A Controllable World of Apps and People for Benchmarking Interactive Coding Agents",
+    "authors": [
+      "Harsh Trivedi"
+    ],
+    "year": 2024,
+    "arxiv_id": "2407.18901",
+    "citation_key": "fixture2024appworld",
+    "preferred_venues": [
+      "ACL"
+    ]
+  },
+  {
+    "query_id": "simple-prompt-injection",
+    "title": "Simple Prompt Injection Attacks Can Leak Personal Data Observed by LLM Agents During Task Execution",
+    "authors": [
+      "Daria Stetsenko"
+    ],
+    "year": 2025,
+    "arxiv_id": "2506.01055",
+    "citation_key": "stetsenko2025simple"
+  },
+  {
+    "query_id": "back-reveal",
+    "title": "Your LLM Agent Can Leak Your Data: Data Exfiltration via Backdoored Tool Use",
+    "authors": [
+      "Wuyang Zhang"
+    ],
+    "year": 2026,
+    "arxiv_id": "2604.05432",
+    "citation_key": "zhang2026backreveal"
+  },
+  {
+    "query_id": "mantra",
+    "title": "MANTRA: Synthesizing SMT-Validated Compliance Benchmarks for Tool-Using LLM Agents",
+    "authors": [
+      "Ashwani Anand"
+    ],
+    "year": 2026,
+    "citation_key": "fixture2025mantra",
+    "arxiv_id": "2605.06334"
+  }
+]

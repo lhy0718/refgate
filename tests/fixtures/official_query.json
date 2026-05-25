@@ -1,0 +1,7 @@
+{
+  "query_id": "agentdojo",
+  "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+  "authors": ["Debenedetti"],
+  "year": 2024,
+  "citation_key": "debenedetti2024agentdojo"
+}

@@ -1,0 +1,60 @@
+{
+  "schema_version": "refgate.lock.v1",
+  "project": "public reference fixture",
+  "generated_at": "2026-05-19T00:00:00+09:00",
+  "audit_policy": {
+    "require_official_bibtex_when_available": true,
+    "allow_manual_fallback": true,
+    "allow_arxiv_fallback": true,
+    "block_unresolved": true,
+    "block_ambiguous": true,
+    "block_claim_unchecked": true
+  },
+  "entries": [
+    {
+      "citation_key": "debenedetti2024agentdojo",
+      "short_title": "AgentDojo",
+      "status": "verified_official_bibtex",
+      "record": {
+        "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+        "authors": ["Edoardo Debenedetti"],
+        "year": 2024,
+        "venue": "NeurIPS",
+        "doi": null,
+        "arxiv_id": "2406.13352"
+      },
+      "authority": {
+        "source": "neurips",
+        "record_url": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/example-Abstract-Conference.html",
+        "bibtex_url": "https://proceedings.neurips.cc/paper_files/paper/23699-/bibtex",
+        "retrieval_method": "official_bibtex_endpoint",
+        "source_priority": 1
+      },
+      "bibtex": {
+        "citation_key": "debenedetti2024agentdojo",
+        "source_kind": "official_export",
+        "entry_type": "inproceedings",
+        "raw_sha256": "e6bc2ebec66dbfb5e7327a70d4fc3d85095d79f5f24c41ece6f04307881c9580",
+        "normalized_sha256": "e6bc2ebec66dbfb5e7327a70d4fc3d85095d79f5f24c41ece6f04307881c9580",
+        "canonical_text": "@inproceedings{debenedetti2024agentdojo,\n  title = {AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents},\n  author = {Debenedetti, Edoardo},\n  booktitle = {Advances in Neural Information Processing Systems},\n  year = {2024},\n  url = {https://proceedings.neurips.cc/paper_files/paper/2024/hash/example-Abstract-Conference.html}\n}\n",
+        "field_checks": {
+          "bibtex_source": "official_export",
+          "title": "checked",
+          "first_author": "checked",
+          "year": "checked",
+          "url": "checked",
+          "doi": "missing",
+          "arxiv_id": "checked"
+        }
+      },
+      "resolver": {
+        "score": 100,
+        "blocking_issues": [],
+        "warnings": [],
+        "decision_trace": ["fixture"]
+      },
+      "checked_at": "2026-05-19",
+      "checked_by": "refgate"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Refgate CLI Workflow Screenshot</title>
+  <desc id="desc">A stylized terminal view showing Refgate audit and handoff commands.</desc>
+  <rect width="1200" height="760" fill="#f8fafc"/>
+  <rect x="80" y="72" width="1040" height="616" rx="18" fill="#0f172a"/>
+  <rect x="80" y="72" width="1040" height="54" rx="18" fill="#1e293b"/>
+  <circle cx="116" cy="99" r="8" fill="#ef4444"/>
+  <circle cx="144" cy="99" r="8" fill="#f59e0b"/>
+  <circle cx="172" cy="99" r="8" fill="#22c55e"/>
+  <text x="104" y="176" fill="#93c5fd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="28">$ refgate audit --bib references.bib --lock refgate.lock.json --submission --json</text>
+  <text x="104" y="236" fill="#bbf7d0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26">{ "ok": true, "blocking_issues": [], "warnings": [...] }</text>
+  <text x="104" y="316" fill="#93c5fd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="28">$ refgate export-handoff --format csl-json --output references.csl.json</text>
+  <text x="104" y="376" fill="#bbf7d0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26">{ "status": "handoff_exported", "entry_count": 42 }</text>
+  <rect x="104" y="432" width="324" height="132" rx="10" fill="#f8fafc"/>
+  <text x="128" y="482" fill="#0f172a" font-family="ui-sans-serif, system-ui" font-size="26" font-weight="700">Verified BibTeX</text>
+  <text x="128" y="526" fill="#334155" font-family="ui-sans-serif, system-ui" font-size="22">official_export preserved</text>
+  <rect x="456" y="432" width="324" height="132" rx="10" fill="#f8fafc"/>
+  <text x="480" y="482" fill="#0f172a" font-family="ui-sans-serif, system-ui" font-size="26" font-weight="700">Claim Evidence</text>
+  <text x="480" y="526" fill="#334155" font-family="ui-sans-serif, system-ui" font-size="22">source spans reviewed</text>
+  <rect x="808" y="432" width="256" height="132" rx="10" fill="#f8fafc"/>
+  <text x="832" y="482" fill="#0f172a" font-family="ui-sans-serif, system-ui" font-size="26" font-weight="700">Handoff</text>
+  <text x="832" y="526" fill="#334155" font-family="ui-sans-serif, system-ui" font-size="22">CSL-JSON ready</text>
+  <path d="M922 618l24 24 58-70" fill="none" stroke="#22c55e" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

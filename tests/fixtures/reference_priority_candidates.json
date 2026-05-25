@@ -1,0 +1,198 @@
+{
+  "agentdojo": [
+    {
+      "source": "neurips",
+      "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+      "authors": [
+        "Edoardo Debenedetti"
+      ],
+      "year": 2024,
+      "venue": "NeurIPS",
+      "doi": "10.52202/079017-2636",
+      "url": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/97091a5177d8dc64b1da8bf3e1f6fb54-Abstract-Datasets_and_Benchmarks_Track.html",
+      "is_official_record": true,
+      "bibtex_url": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/97091a5177d8dc64b1da8bf3e1f6fb54-Bibtex-Datasets_and_Benchmarks_Track.bib",
+      "source_priority": 1,
+      "raw": {
+        "fixture_status": "official_url_verified"
+      }
+    }
+  ],
+  "asb": [
+    {
+      "source": "arxiv",
+      "title": "Agent Security Bench (ASB): Formalizing and Benchmarking Attacks and Defenses in LLM-based Agents",
+      "authors": [
+        "Hanrong Zhang"
+      ],
+      "year": 2024,
+      "venue": "arXiv preprint",
+      "arxiv_id": "2410.02644",
+      "url": "https://arxiv.org/abs/2410.02644v4",
+      "is_official_record": true,
+      "bibtex_url": null,
+      "source_priority": 2,
+      "raw": {
+        "accessed_at": "2026-05-20",
+        "arxiv_version": "v4",
+        "fixture_status": "arxiv_url_verified",
+        "official_record_status": "preprint_only"
+      }
+    }
+  ],
+  "toolemu": [
+    {
+      "source": "iclr",
+      "title": "Identifying the Risks of LM Agents with an LM-Emulated Sandbox",
+      "authors": [
+        "Yangjun Ruan"
+      ],
+      "year": 2024,
+      "venue": "ICLR",
+      "arxiv_id": "2309.15817",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/7274ed909a312d4d869cc328ad1c5f04-Abstract-Conference.html",
+      "is_official_record": true,
+      "bibtex_url": "https://proceedings.iclr.cc/paper_files/paper/4437-/bibtex",
+      "source_priority": 1,
+      "raw": {
+        "fixture_status": "official_url_verified"
+      }
+    }
+  ],
+  "tensor-trust": [
+    {
+      "source": "iclr",
+      "title": "Tensor Trust: Interpretable Prompt Injection Attacks from an Online Game",
+      "authors": [
+        "Sam Toyer"
+      ],
+      "year": 2024,
+      "venue": "ICLR",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/519c51529c3544b3430bd8b17d400365-Abstract-Conference.html",
+      "is_official_record": true,
+      "bibtex_url": "https://proceedings.iclr.cc/paper_files/paper/4045-/bibtex",
+      "source_priority": 1,
+      "raw": {
+        "fixture_status": "official_url_verified"
+      }
+    }
+  ],
+  "injecagent": [
+    {
+      "source": "acl",
+      "title": "InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents",
+      "authors": [
+        "Qiusi Zhan"
+      ],
+      "year": 2024,
+      "venue": "ACL Findings",
+      "arxiv_id": "2403.02691",
+      "url": "https://aclanthology.org/2024.findings-acl.624/",
+      "is_official_record": true,
+      "bibtex_url": "https://aclanthology.org/2024.findings-acl.624.bib",
+      "source_priority": 1,
+      "raw": {
+        "fixture_status": "official_url_verified"
+      }
+    }
+  ],
+  "webarena": [
+    {
+      "source": "iclr",
+      "title": "WebArena: A Realistic Web Environment for Building Autonomous Agents",
+      "authors": [
+        "Shuyan Zhou"
+      ],
+      "year": 2024,
+      "venue": "ICLR",
+      "arxiv_id": "2307.13854",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/4410c0711e9154a7a2d26f9b3816d1ef-Abstract-Conference.html",
+      "is_official_record": true,
+      "bibtex_url": "https://proceedings.iclr.cc/paper_files/paper/4147-/bibtex",
+      "source_priority": 1,
+      "raw": {
+        "fixture_status": "official_url_verified"
+      }
+    }
+  ],
+  "appworld": [
+    {
+      "source": "acl",
+      "title": "AppWorld: A Controllable World of Apps and People for Benchmarking Interactive Coding Agents",
+      "authors": [
+        "Harsh Trivedi"
+      ],
+      "year": 2024,
+      "venue": "ACL",
+      "arxiv_id": "2407.18901",
+      "doi": "10.18653/v1/2024.acl-long.850",
+      "url": "https://aclanthology.org/2024.acl-long.850/",
+      "is_official_record": true,
+      "bibtex_url": "https://aclanthology.org/2024.acl-long.850.bib",
+      "source_priority": 1,
+      "raw": {
+        "fixture_status": "official_url_verified"
+      }
+    }
+  ],
+  "simple-prompt-injection": [
+    {
+      "source": "arxiv",
+      "title": "Simple Prompt Injection Attacks Can Leak Personal Data Observed by LLM Agents During Task Execution",
+      "authors": [
+        "Daria Stetsenko"
+      ],
+      "year": 2025,
+      "venue": "arXiv",
+      "arxiv_id": "2506.01055",
+      "url": "https://arxiv.org/abs/2506.01055",
+      "is_official_record": true,
+      "bibtex_url": null,
+      "source_priority": 1,
+      "raw": {
+        "fixture_status": "preprint_url_verified"
+      }
+    }
+  ],
+  "back-reveal": [
+    {
+      "source": "arxiv",
+      "title": "Your LLM Agent Can Leak Your Data: Data Exfiltration via Backdoored Tool Use",
+      "authors": [
+        "Wuyang Zhang"
+      ],
+      "year": 2026,
+      "venue": "arXiv",
+      "arxiv_id": "2604.05432",
+      "url": "https://arxiv.org/abs/2604.05432",
+      "is_official_record": true,
+      "bibtex_url": null,
+      "source_priority": 1,
+      "raw": {
+        "fixture_status": "preprint_url_verified"
+      }
+    }
+  ],
+  "mantra": [
+    {
+      "source": "arxiv",
+      "title": "MANTRA: Synthesizing SMT-Validated Compliance Benchmarks for Tool-Using LLM Agents",
+      "authors": [
+        "Ashwani Anand"
+      ],
+      "year": 2026,
+      "venue": "arXiv preprint",
+      "arxiv_id": "2605.06334",
+      "url": "https://arxiv.org/abs/2605.06334v1",
+      "is_official_record": true,
+      "bibtex_url": null,
+      "source_priority": 2,
+      "raw": {
+        "accessed_at": "2026-05-20",
+        "arxiv_version": "v1",
+        "fixture_status": "arxiv_url_verified",
+        "official_record_status": "preprint_only"
+      }
+    }
+  ]
+}

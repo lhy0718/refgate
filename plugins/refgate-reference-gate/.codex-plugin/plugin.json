@@ -1,0 +1,29 @@
+{
+  "name": "refgate-reference-gate",
+  "version": "0.1.0",
+  "description": "Use the Refgate CLI to gate manuscript references, BibTeX provenance, source PDFs, and citation evidence.",
+  "author": {
+    "name": "Refgate contributors",
+    "url": "https://github.com/lhy0718/refgate"
+  },
+  "homepage": "https://github.com/lhy0718/refgate",
+  "repository": "https://github.com/lhy0718/refgate",
+  "license": "MIT",
+  "keywords": ["academic-writing", "bibtex", "citation-audit", "reference-gate"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Refgate Reference Gate",
+    "shortDescription": "Gate BibTeX provenance and citation evidence.",
+    "longDescription": "Use Refgate CLI workflows to bootstrap ordinary TeX/BibTeX manuscripts, resolve source provenance, review claim-to-source evidence, catch source-title mismatches, and produce standalone audit artifacts.",
+    "developerName": "Refgate contributors",
+    "category": "Research",
+    "capabilities": ["Skills", "Local CLI workflow"],
+    "websiteURL": "https://github.com/lhy0718/refgate",
+    "defaultPrompt": [
+      "Bootstrap Refgate for this TeX/BibTeX paper.",
+      "Audit this manuscript bibliography and claim evidence.",
+      "Run Refgate paper-audit and follow the next actions."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

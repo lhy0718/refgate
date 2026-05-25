@@ -1,0 +1,2 @@
+claim_id	manuscript_location	claim_text	citation_key	source_location	quote_or_evidence	status	notes	claim_type	importance
+claim-0001	line 2	AgentDojo demonstrates benchmark risks for tool-using agents \cite{debenedetti2024agentdojo}.	debenedetti2024agentdojo			claim_unchecked		benchmark_or_result	important
