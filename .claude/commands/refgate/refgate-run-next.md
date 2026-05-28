@@ -29,7 +29,7 @@ actions:
 
 ```bash
 refgate run-next --from PAPER_AUDIT_JSON --allow-writes --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
-refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --json
+refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
 ```
 
 Do not enable live network or human-review actions unless the user explicitly

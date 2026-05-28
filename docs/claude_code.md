@@ -71,7 +71,7 @@ plan provides:
 
 ```bash
 refgate run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-human-review --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
-refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --json
+refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
 ```
 
 For CI, copy `examples/paper-repo/.github/workflows/refgate-paper-audit.yml`

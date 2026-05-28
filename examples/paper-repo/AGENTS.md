@@ -32,7 +32,7 @@ added, execute the reference-check action only after inspecting the plan:
 
 ```bash
 refgate run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-human-review --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
-refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --json
+refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
 ```
 
 ## Required Checks

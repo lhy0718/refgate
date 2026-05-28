@@ -80,7 +80,7 @@ Inspect follow-up actions without executing them:
 ```bash
 refgate run-next --from PAPER_AUDIT_OUTPUT_JSON --json
 refgate run-next --from PAPER_AUDIT_OUTPUT_JSON --output-plan .refgate/next_plan.json --json
-refgate run-summary --input .refgate/next_plan.json --json
+refgate run-summary --input .refgate/next_plan.json --markdown .refgate/next_summary.md --json
 ```
 
 Read the top-level `recommended_next` field and each action's `agent_hint`
@@ -94,7 +94,7 @@ For dogfood or meta-harness loops, write a run log and summarize it:
 
 ```bash
 refgate run-next --from PAPER_AUDIT_OUTPUT_JSON --execute --write-run-log .refgate/next_run_log.json --json
-refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --json
+refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
 ```
 
 ## Reference Checks

@@ -45,7 +45,7 @@ added, execute only the reviewed reference-check action:
 
 ```bash
 python -m refgate run-next --from PATH/TO/.refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-human-review --max-actions 1 --execute --write-run-log PATH/TO/.refgate/next_run_log.json --json
-python -m refgate run-summary --input PATH/TO/.refgate/next_plan.json --input PATH/TO/.refgate/next_run_log.json --json
+python -m refgate run-summary --input PATH/TO/.refgate/next_plan.json --input PATH/TO/.refgate/next_run_log.json --markdown PATH/TO/.refgate/next_summary.md --json
 ```
 
 ### Reference Rules

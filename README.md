@@ -138,7 +138,7 @@ python -m refgate run-next --from path/to/paper_audit.json --output-plan .refgat
 python -m refgate run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-human-review --json
 python -m refgate run-next --from path/to/paper_audit.json --allow-writes --max-actions 1 --execute --json
 python -m refgate run-next --from path/to/paper_audit.json --allow-writes --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
-python -m refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --json
+python -m refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
 python -m refgate run-summary --input .refgate/next_plan.json --markdown .refgate/next_summary.md --json
 python -m refgate fixture-matrix --queries tests/fixtures/reference_priority_queries.json --candidates tests/fixtures/reference_priority_candidates.json --json
 python -m refgate live-smoke --cache-root .refgate/cache --manifest tests/fixtures/cache_manifest.example.json --json

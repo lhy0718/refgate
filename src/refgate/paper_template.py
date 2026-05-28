@@ -46,7 +46,7 @@ added, execute the reference-check action only after inspecting the plan:
 
 ```bash
 {command} run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-human-review --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
-{command} run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --json
+{command} run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
 ```
 
 After provenance updates, plan a lockfile-backed bibliography synchronization:
