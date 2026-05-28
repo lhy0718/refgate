@@ -84,6 +84,16 @@ python -m refgate paper-audit --tex PATH/TO/main.tex --bib PATH/TO/references.bi
 python -m refgate audit --tex PATH/TO/main.tex --bib PATH/TO/references.bib --lock PATH/TO/refgate.lock.json --claims PATH/TO/refgate_claims.tsv --frozen --submission --report PATH/TO/refgate_audit.md --json
 ```
 
+If source-title validation reports a mismatch, first replace the mapped source
+file unless the official record and source first-page title were explicitly
+reviewed as an intentional metadata/source-title mismatch. Record that review in
+JSONL and rerun both the source-title gate and paper audit:
+
+```bash
+python -m refgate check-source-titles --lock PATH/TO/refgate.lock.json --source-map PATH/TO/refgate_source_map.tsv --title-review PATH/TO/.refgate/source_title_review.jsonl --json
+python -m refgate paper-audit --tex PATH/TO/main.tex --bib PATH/TO/references.bib --lock PATH/TO/refgate.lock.json --claims PATH/TO/refgate_claims.tsv --report PATH/TO/refgate_audit.md --source-dir PATH/TO/sources --source-map-output PATH/TO/refgate_source_map.tsv --claim-review-output PATH/TO/refgate_claim_review.md --source-title-review PATH/TO/.refgate/source_title_review.jsonl --submission --json
+```
+
 To create a standalone reviewed handoff bundle:
 
 ```bash

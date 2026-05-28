@@ -58,6 +58,16 @@ When citation-key named source files exist under `sources/`:
 refgate paper-audit --tex paper.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --report refgate_audit.md --source-dir sources --source-map-output refgate_source_map.tsv --claim-review-output refgate_claim_review.md --submission --json
 ```
 
+If source-title validation reports a mismatch, replace the mapped source file
+unless the official record and source first-page title were explicitly reviewed
+as an intentional metadata/source-title mismatch. Record that review in JSONL
+and rerun:
+
+```bash
+refgate check-source-titles --lock refgate.lock.json --source-map refgate_source_map.tsv --title-review .refgate/source_title_review.jsonl --json
+refgate paper-audit --tex paper.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --report refgate_audit.md --source-dir sources --source-map-output refgate_source_map.tsv --claim-review-output refgate_claim_review.md --source-title-review .refgate/source_title_review.jsonl --submission --json
+```
+
 Before submission or final handoff:
 
 ```bash

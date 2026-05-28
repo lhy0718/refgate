@@ -62,6 +62,16 @@ available under `sources/`:
 {command} paper-audit --tex {tex} --bib {bib} --lock {lock} --claims {claims} --report {report} --source-dir sources --source-map-output refgate_source_map.tsv --claim-review-output refgate_claim_review.md --submission --json
 ```
 
+If that gate reports a source-title mismatch, do not accept claim evidence by
+overlap alone. Replace the mapped source file unless the official record and the
+source first-page title were reviewed as an intentional metadata/source-title
+mismatch. Record that review in JSONL and rerun:
+
+```bash
+{command} check-source-titles --lock {lock} --source-map refgate_source_map.tsv --title-review .refgate/source_title_review.jsonl --json
+{command} paper-audit --tex {tex} --bib {bib} --lock {lock} --claims {claims} --report {report} --source-dir sources --source-map-output refgate_source_map.tsv --claim-review-output refgate_claim_review.md --source-title-review .refgate/source_title_review.jsonl --submission --json
+```
+
 Run the frozen final gate:
 
 ```bash

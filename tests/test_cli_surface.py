@@ -1170,6 +1170,8 @@ def test_cli_paper_agents_template_writes_generic_instructions(tmp_path, capsys)
     assert "paper-audit" in text
     assert "run-next --from .refgate/next_plan.json --json" in text
     assert "run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json" in text
+    assert "check-source-titles --lock refgate.lock.json --source-map refgate_source_map.tsv --title-review .refgate/source_title_review.jsonl --json" in text
+    assert "--source-title-review .refgate/source_title_review.jsonl" in text
     assert "refgate-paper-audit" in text
 
 
