@@ -959,12 +959,13 @@ def cmd_validate_source_text(args: argparse.Namespace) -> int:
 
 
 def cmd_check_source_titles(args: argparse.Namespace) -> int:
-    result = check_source_titles(args.lock, args.source_map)
+    result = check_source_titles(args.lock, args.source_map, title_review_path=args.title_review)
     write_json(
         envelope(
             "source_titles_checked",
             data=result,
             blocking_issues=result["blocking_issues"],
+            warnings=result.get("warnings", []),
             next_actions=source_title_next_actions(result),
         )
     )
@@ -1116,6 +1117,7 @@ def cmd_paper_audit(args: argparse.Namespace) -> int:
         source_dir=args.source_dir,
         source_map_output=args.source_map_output,
         claim_review_output=args.claim_review_output,
+        source_title_review=args.source_title_review,
         project=args.project,
         submission=args.submission,
         allow_blocking_handoff=args.allow_blocking_handoff,
@@ -1451,6 +1453,7 @@ def build_parser() -> argparse.ArgumentParser:
     source_title_parser = subparsers.add_parser("check-source-titles")
     source_title_parser.add_argument("--lock", required=True)
     source_title_parser.add_argument("--source-map", required=True)
+    source_title_parser.add_argument("--title-review")
     source_title_parser.add_argument("--json", action="store_true")
     source_title_parser.set_defaults(func=cmd_check_source_titles)
 
@@ -1511,6 +1514,7 @@ def build_parser() -> argparse.ArgumentParser:
     paper_audit_parser.add_argument("--source-dir")
     paper_audit_parser.add_argument("--source-map-output")
     paper_audit_parser.add_argument("--claim-review-output")
+    paper_audit_parser.add_argument("--source-title-review")
     paper_audit_parser.add_argument("--project")
     paper_audit_parser.add_argument("--frozen", action="store_true", help="Compatibility flag; paper-audit always audits against the supplied lockfile.")
     paper_audit_parser.add_argument("--submission", action="store_true")

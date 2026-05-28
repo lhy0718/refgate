@@ -249,7 +249,12 @@ and `paper-audit --source-map` run the same gate and block on
 `SOURCE_TITLE_MISMATCH` when a PDF/text source is for a different title than the
 reference record. Mismatches include a `REVIEW_SOURCE_TITLE_MISMATCH`
 next-action so agents do not treat lexical evidence overlap as sufficient when
-the mapped source appears to be the wrong paper.
+the mapped source appears to be the wrong paper. A reviewed metadata/source
+title mismatch can be accepted with `--title-review REVIEW.jsonl`; each JSONL
+object must include `citation_key`, an accepted `decision`, `expected_title`,
+and `source_title`, and may include `source_text`, `reviewer`, and `notes`.
+The gate still blocks if the review does not match the current lock title and
+current first-page source title.
 `download-sources` is network-free by default: it derives citation-key PDF
 targets from lockfile URLs, arXiv IDs, ACL Anthology records, or known venue PDF
 URL patterns and returns a plan. Add `--live` only when the user has opted into

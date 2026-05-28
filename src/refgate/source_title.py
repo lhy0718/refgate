@@ -13,6 +13,13 @@ from .resolver import normalize_title
 from .source_text import read_source_text
 
 
+ACCEPTED_TITLE_REVIEW_DECISIONS = {
+    "accepted_mismatch",
+    "source_title_mismatch_accepted",
+    "accepted_official_metadata_mismatch",
+}
+
+
 def _source_map_rows(path: str | Path) -> list[dict[str, str]]:
     target = Path(path)
     base_dir = target.parent
@@ -38,6 +45,45 @@ def _source_map_rows(path: str | Path) -> list[dict[str, str]]:
             }
         )
     return resolved
+
+
+def _read_jsonl(path: str | Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSONL at {path}:{line_number}: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise ValueError(f"Invalid JSONL at {path}:{line_number}: expected object")
+        rows.append(payload)
+    return rows
+
+
+def _resolve_review_source_text(value: str, review_path: Path) -> str:
+    source_path = Path(value)
+    if not source_path.is_absolute():
+        source_path = review_path.parent / source_path
+    return str(source_path)
+
+
+def _load_title_reviews(path: str | Path | None) -> dict[str, list[dict[str, Any]]]:
+    if not path:
+        return {}
+    review_path = Path(path)
+    reviews: dict[str, list[dict[str, Any]]] = {}
+    for row in _read_jsonl(review_path):
+        citation_key = str(row.get("citation_key", "")).strip()
+        if not citation_key:
+            continue
+        normalized = dict(row)
+        if normalized.get("source_text"):
+            normalized["source_text"] = _resolve_review_source_text(str(normalized["source_text"]), review_path)
+        reviews.setdefault(citation_key, []).append(normalized)
+    return reviews
 
 
 def _first_page(text: str) -> str:
@@ -119,12 +165,66 @@ def source_title_matches(expected_title: str, candidates: list[str]) -> bool:
     return False
 
 
-def check_source_titles(lock_path: str | Path, source_map_path: str | Path) -> dict[str, Any]:
+def _review_title_matches_current(review_title: str, candidates: list[str]) -> bool:
+    review_normalized = normalize_title(review_title)
+    if not review_normalized:
+        return False
+    review_compact = _compact_title(review_title)
+    for candidate in candidates:
+        if normalize_title(candidate) == review_normalized:
+            return True
+        if review_compact and review_compact == _compact_title(candidate):
+            return True
+    return False
+
+
+def _same_source_text_path(reviewed_source: str, source_text: str) -> bool:
+    if reviewed_source == source_text:
+        return True
+    return Path(reviewed_source).resolve(strict=False) == Path(source_text).resolve(strict=False)
+
+
+def _matching_title_review(
+    *,
+    reviews: dict[str, list[dict[str, Any]]],
+    citation_key: str,
+    source_text: str,
+    expected_title: str,
+    candidates: list[str],
+) -> dict[str, Any] | None:
+    expected_normalized = normalize_title(expected_title)
+    for review in reviews.get(citation_key, []):
+        decision = str(review.get("decision", "")).strip().lower()
+        if decision not in ACCEPTED_TITLE_REVIEW_DECISIONS:
+            continue
+        reviewed_source = str(review.get("source_text", "")).strip()
+        if reviewed_source and not _same_source_text_path(reviewed_source, source_text):
+            continue
+        reviewed_expected = str(review.get("expected_title", "")).strip()
+        if not reviewed_expected or normalize_title(reviewed_expected) != expected_normalized:
+            continue
+        reviewed_source_title = str(
+            review.get("source_title", "") or review.get("source_candidate", "") or review.get("observed_title", "")
+        ).strip()
+        if not reviewed_source_title or not _review_title_matches_current(reviewed_source_title, candidates):
+            continue
+        return review
+    return None
+
+
+def check_source_titles(
+    lock_path: str | Path,
+    source_map_path: str | Path,
+    *,
+    title_review_path: str | Path | None = None,
+) -> dict[str, Any]:
     lockfile = load_lockfile(lock_path)
     entries = lockfile.by_citation_key()
     rows = _source_map_rows(source_map_path)
+    title_reviews = _load_title_reviews(title_review_path)
     results: list[dict[str, Any]] = []
     issues: list[AuditIssue] = []
+    warnings: list[AuditIssue] = []
     seen: set[tuple[str, str]] = set()
 
     for row in rows:
@@ -201,24 +301,52 @@ def check_source_titles(lock_path: str | Path, source_map_path: str | Path) -> d
         elif source_title_matches(expected_title, candidates):
             result["ok"] = True
         else:
-            issues.append(
-                AuditIssue(
-                    code="SOURCE_TITLE_MISMATCH",
-                    message="The source file title does not match the lockfile/BibTeX title.",
-                    severity="blocking",
-                    citation_key=citation_key,
-                    evidence=[f"expected: {expected_title}", f"source candidate: {candidates[0]}", source_path],
-                )
+            reviewed_mismatch = _matching_title_review(
+                reviews=title_reviews,
+                citation_key=citation_key,
+                source_text=source_path,
+                expected_title=expected_title,
+                candidates=candidates,
             )
+            if reviewed_mismatch:
+                result["ok"] = True
+                result["reviewed_mismatch"] = True
+                result["review"] = {
+                    "decision": reviewed_mismatch.get("decision"),
+                    "reviewer": reviewed_mismatch.get("reviewer"),
+                    "notes": reviewed_mismatch.get("notes") or reviewed_mismatch.get("review_notes"),
+                }
+                warnings.append(
+                    AuditIssue(
+                        code="SOURCE_TITLE_MISMATCH_REVIEWED",
+                        message="The source file title differs from the lockfile/BibTeX title, and the mismatch has an accepted source-title review record.",
+                        severity="warning",
+                        citation_key=citation_key,
+                        evidence=[f"expected: {expected_title}", f"source candidate: {candidates[0]}", source_path],
+                    )
+                )
+            else:
+                issues.append(
+                    AuditIssue(
+                        code="SOURCE_TITLE_MISMATCH",
+                        message="The source file title does not match the lockfile/BibTeX title.",
+                        severity="blocking",
+                        citation_key=citation_key,
+                        evidence=[f"expected: {expected_title}", f"source candidate: {candidates[0]}", source_path],
+                    )
+                )
         results.append(result)
 
     return {
         "lock": str(lock_path),
         "source_map": str(source_map_path),
+        "title_review": str(title_review_path) if title_review_path else None,
         "checked": len(results),
         "ok_count": sum(1 for result in results if result.get("ok")),
+        "reviewed_mismatch_count": sum(1 for result in results if result.get("reviewed_mismatch")),
         "results": results,
         "blocking_issues": [issue.to_dict() for issue in issues],
+        "warnings": [issue.to_dict() for issue in warnings],
         "ok": not issues,
     }
 
@@ -240,6 +368,12 @@ def source_title_next_actions(result: dict[str, Any]) -> list[dict[str, Any]]:
                 "network_required": False,
                 "message": "Review mapped source files whose first-page title does not match the lockfile title; replace the source file or repair the lock/BibTeX only after official provenance review.",
                 "citation_key_sample": [item["citation_key"] for item in mismatches[:10]],
+                "review_schema": {
+                    "format": "jsonl",
+                    "required_fields": ["citation_key", "decision", "expected_title", "source_title"],
+                    "accepted_decisions": sorted(ACCEPTED_TITLE_REVIEW_DECISIONS),
+                    "optional_fields": ["source_text", "reviewer", "notes"],
+                },
                 "command": (
                     "python -m refgate check-source-titles "
                     f"--lock {shlex.quote(str(result.get('lock')))} "
@@ -260,9 +394,21 @@ def render_source_title_check_section(result: dict[str, Any] | None) -> str:
         f"- Source map: {result.get('source_map')}",
         f"- Checked sources: {result.get('checked', 0)}",
         f"- Passing sources: {result.get('ok_count', 0)}",
+        f"- Reviewed mismatches: {result.get('reviewed_mismatch_count', 0)}",
         f"- Blocking issues: {len(result.get('blocking_issues', []))}",
         "",
     ]
+    reviewed = [item for item in result.get("results", []) if item.get("reviewed_mismatch")]
+    if reviewed:
+        lines.extend(["### Reviewed Mismatches", ""])
+        for item in reviewed:
+            candidates = item.get("title_candidates") or []
+            candidate = candidates[0] if candidates else "(no candidate)"
+            lines.append(
+                f"- `{item.get('citation_key', '')}`: expected `{item.get('expected_title', '')}`; "
+                f"source candidate `{candidate}`"
+            )
+        lines.append("")
     failing = [item for item in result.get("results", []) if not item.get("ok")]
     if failing:
         lines.extend(["### Review Required", ""])

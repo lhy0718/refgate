@@ -141,6 +141,68 @@ def test_check_source_titles_blocks_mismatched_first_page_title(tmp_path, capsys
     assert payload["data"]["results"][0]["title_candidates"][0] == "A Completely Different Paper Title"
     assert payload["next_actions"][0]["code"] == "REVIEW_SOURCE_TITLE_MISMATCH"
     assert payload["next_actions"][0]["kind"] == "source_integrity_review"
+    assert payload["next_actions"][0]["review_schema"]["format"] == "jsonl"
+
+
+def test_check_source_titles_accepts_reviewed_official_metadata_mismatch(tmp_path, capsys):
+    lock = tmp_path / "refgate.lock.json"
+    source = tmp_path / "debenedetti2024agentdojo.txt"
+    source_map = tmp_path / "source_map.tsv"
+    title_review = tmp_path / "source_title_review.jsonl"
+    expected_title = "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents"
+    observed_title = "A Completely Different Paper Title"
+    lock.write_text((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8"), encoding="utf-8")
+    source.write_text(
+        "[page 1]\n"
+        f"{observed_title}\n"
+        "Ada Example\n\n"
+        "Abstract\n"
+        "Refgate verifies references with source evidence before bibliography approval.\n",
+        encoding="utf-8",
+    )
+    source_map.write_text(
+        "citation_key\tsource_text\tsource_label\tevidence_kind\n"
+        f"debenedetti2024agentdojo\t{source.name}\t{source.name}\tsource_text\n",
+        encoding="utf-8",
+    )
+    title_review.write_text(
+        json.dumps(
+            {
+                "citation_key": "debenedetti2024agentdojo",
+                "source_text": str(source),
+                "decision": "accepted_official_metadata_mismatch",
+                "expected_title": expected_title,
+                "source_title": observed_title,
+                "reviewer": "test",
+                "notes": "Official record and mapped PDF first page were manually compared.",
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "check-source-titles",
+            "--lock",
+            str(lock),
+            "--source-map",
+            str(source_map),
+            "--title-review",
+            str(title_review),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["blocking_issues"] == []
+    assert payload["data"]["reviewed_mismatch_count"] == 1
+    assert payload["data"]["results"][0]["reviewed_mismatch"] is True
+    assert payload["warnings"][0]["code"] == "SOURCE_TITLE_MISMATCH_REVIEWED"
+    assert payload["next_actions"] == []
 
 
 def test_paper_audit_blocks_when_mapped_source_title_mismatches_lock_title(tmp_path, capsys):
@@ -192,3 +254,79 @@ def test_paper_audit_blocks_when_mapped_source_title_mismatches_lock_title(tmp_p
     assert payload["data"]["source_title_check"]["checked"] == 1
     assert any(action["code"] == "REVIEW_SOURCE_TITLE_MISMATCH" for action in payload["next_actions"])
     assert "## Source Title Check" in report.read_text(encoding="utf-8")
+
+
+def test_paper_audit_accepts_reviewed_source_title_mismatch(tmp_path, capsys):
+    tex = tmp_path / "manuscript.tex"
+    bib = tmp_path / "sample.bib"
+    lock = tmp_path / "refgate.lock.json"
+    claims = tmp_path / "claims.tsv"
+    report = tmp_path / "refgate_audit.md"
+    queries = tmp_path / "refgate_queries.json"
+    source_dir = tmp_path / "sources"
+    title_review = tmp_path / "source_title_review.jsonl"
+    source_dir.mkdir()
+    tex.write_text((FIXTURES / "manuscript.tex").read_text(encoding="utf-8"), encoding="utf-8")
+    bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
+    lock.write_text((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8"), encoding="utf-8")
+    claims.write_text((FIXTURES / "claims_checked.tsv").read_text(encoding="utf-8"), encoding="utf-8")
+    source = source_dir / "debenedetti2024agentdojo.txt"
+    observed_title = "Securing Large Language Model Agents via Structured Graph Abstraction"
+    expected_title = "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents"
+    source.write_text(
+        "[page 1]\n"
+        f"{observed_title}\n"
+        "Ada Example\n\n"
+        "Refgate verifies references with source evidence before bibliography approval.\n",
+        encoding="utf-8",
+    )
+    title_review.write_text(
+        json.dumps(
+            {
+                "citation_key": "debenedetti2024agentdojo",
+                "source_text": str(source),
+                "decision": "accepted_official_metadata_mismatch",
+                "expected_title": expected_title,
+                "source_title": observed_title,
+                "reviewer": "test",
+                "notes": "Official record and mapped PDF first page were manually compared.",
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "paper-audit",
+            "--tex",
+            str(tex),
+            "--bib",
+            str(bib),
+            "--lock",
+            str(lock),
+            "--claims",
+            str(claims),
+            "--report",
+            str(report),
+            "--resolver-output",
+            str(queries),
+            "--source-dir",
+            str(source_dir),
+            "--source-title-review",
+            str(title_review),
+            "--submission",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["blocking_issues"] == []
+    assert payload["data"]["source_title_check"]["reviewed_mismatch_count"] == 1
+    assert any(issue["code"] == "SOURCE_TITLE_MISMATCH_REVIEWED" for issue in payload["warnings"])
+    report_text = report.read_text(encoding="utf-8")
+    assert "### Reviewed Mismatches" in report_text
+    assert observed_title in report_text

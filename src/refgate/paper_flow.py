@@ -583,6 +583,7 @@ def run_paper_audit(
     source_dir: str | Path | None = None,
     source_map_output: str | Path | None = None,
     claim_review_output: str | Path | None = None,
+    source_title_review: str | Path | None = None,
     project: str | None = None,
     submission: bool = False,
     allow_blocking_handoff: bool = False,
@@ -628,7 +629,7 @@ def run_paper_audit(
             render_paper_claim_review_report(claims_path, claim_source_check=claim_source_check),
             encoding="utf-8",
         )
-        source_title_check = check_source_titles(lock_path, active_source_map)
+        source_title_check = check_source_titles(lock_path, active_source_map, title_review_path=source_title_review)
     else:
         review_target = Path(claim_review_output) if claim_review_output else None
         if review_target:
@@ -654,6 +655,7 @@ def run_paper_audit(
     issues.extend(audit_claims_table(claims_path, submission=submission))
     if source_title_check:
         issues.extend(AuditIssue(**issue) for issue in source_title_check.get("blocking_issues", []))
+        issues.extend(AuditIssue(**issue) for issue in source_title_check.get("warnings", []))
     blocking = [issue for issue in issues if issue.severity == "blocking"]
     warnings = [issue for issue in issues if issue.severity == "warning"]
 

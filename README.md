@@ -117,6 +117,7 @@ python -m refgate evidence-suggest-bundle --claims tests/fixtures/claims_uncheck
 python -m refgate claim-consistency --claims tests/fixtures/claims_checked.tsv --json
 python -m refgate validate-source-text --text tests/fixtures/source_excerpt.txt --json
 python -m refgate check-source-titles --lock path/to/refgate.lock.json --source-map path/to/source_map.tsv --json
+python -m refgate check-source-titles --lock path/to/refgate.lock.json --source-map path/to/source_map.tsv --title-review path/to/source_title_review.jsonl --json
 python -m refgate export-review-bundle --tex path/to/main.tex --bib path/to/references.bib --lock path/to/refgate.lock.json --claims path/to/refgate_claims.tsv --source-dir path/to/sources --output path/to/.refgate/codex_review_bundle.json --markdown path/to/.refgate/codex_review_bundle.md --json
 python -m refgate import-review --claims path/to/refgate_claims.tsv --review path/to/.refgate/codex_review_result.jsonl --output path/to/refgate_claims.reviewed.tsv --json
 python -m refgate download-sources --lock path/to/refgate.lock.json --source-dir path/to/sources --json
@@ -177,7 +178,12 @@ The same source mapping also runs a source-title gate: the first-page title
 candidate from each mapped source file must match the lockfile/BibTeX title, or
 submission mode blocks with `SOURCE_TITLE_MISMATCH`. Use `check-source-titles`
 directly when you want to audit a reviewed source map without running the full
-paper flow.
+paper flow. If an official record and a mapped PDF/text source are intentionally
+different because of an accepted publisher/arXiv metadata mismatch, keep the
+gate blocking by default and pass a reviewed JSONL file with `--title-review`.
+Each accepted line must name the citation key, accepted decision, current
+lockfile title, and current first-page source title; stale or underspecified
+reviews do not clear the blocker.
 Use `download-sources` before source mapping when the lockfile contains a
 deterministic official/arXiv/venue PDF location. Without `--live`, it only
 returns a plan and follow-up action; with `--live`, it writes citation-key named

@@ -138,6 +138,7 @@ checked.
 ```bash
 refgate validate-source-text --text SOURCE_TEXT_OR_PDF --json
 refgate check-source-titles --lock REFGATE_LOCK_JSON --source-map REFGATE_SOURCE_MAP_TSV --json
+refgate check-source-titles --lock REFGATE_LOCK_JSON --source-map REFGATE_SOURCE_MAP_TSV --title-review SOURCE_TITLE_REVIEW_JSONL --json
 refgate download-sources --lock REFGATE_LOCK_JSON --source-dir SOURCES_DIR --json
 refgate download-sources --lock REFGATE_LOCK_JSON --source-dir SOURCES_DIR --citation-key CITATION_KEY --live --json
 refgate evidence-suggest-bundle --claims REFGATE_CLAIMS_TSV --text SOURCE_TEXT_OR_PDF --output SUGGESTED_CLAIMS_TSV --json
@@ -150,7 +151,11 @@ refgate claim-report --claims SUGGESTED_CLAIMS_TSV --output REFGATE_CLAIM_REVIEW
 When using source files, do not stop at claim overlap. The mapped PDF/text
 source must also have a first-page title that matches the lockfile/BibTeX
 title. `paper-audit --source-dir` runs this gate automatically; use
-`check-source-titles` directly when auditing an existing source map.
+`check-source-titles` directly when auditing an existing source map. When an
+official record title and source first-page title intentionally differ, pass a
+reviewed source-title JSONL file with `--title-review`; accepted lines must
+include the current `citation_key`, `decision`, `expected_title`, and
+`source_title`, with optional `source_text`, `reviewer`, and `notes`.
 
 For Codex-assisted claim review, export a review bundle after source mapping.
 The bundle includes multiple deterministic evidence candidates per mapped source;
@@ -218,7 +223,8 @@ Use `next_actions` as the handoff contract. Common action kinds:
 - `codex_claim_review_bundle`: export claim/source bundles for Codex review.
 - `claim_evidence_review`: inspect evidence and keep unsupported claims blocked.
 - `source_integrity_review`: resolve source-title mismatches before final
-  submission.
+  submission, or record an accepted official/source title mismatch with
+  `--title-review` after provenance review.
 
 ## Rules
 
