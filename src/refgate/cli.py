@@ -23,6 +23,7 @@ from .live_smoke import (
     LiveSmokeQueryItem,
     cache_manifest,
     compare_cache_manifest,
+    live_smoke_failure_result,
     run_live_smoke,
     run_live_smoke_suite,
     run_live_smoke_suite_items,
@@ -956,19 +957,39 @@ def cmd_live_smoke(args: argparse.Namespace) -> int:
             retry_after_seconds=args.retry_after_seconds,
         )
     except Exception as exc:
+        error = f"{exc.__class__.__name__}: {exc}"
+        result = live_smoke_failure_result(
+            args.source,
+            query,
+            cache_root=args.cache_root,
+            error=error,
+            prefer_cache=args.prefer_cache,
+            min_interval_seconds=args.min_interval_seconds,
+            retry=args.retry,
+            retry_after_seconds=args.retry_after_seconds,
+        )
         write_json(
             envelope(
                 "live_smoke_failed",
+                data=result,
                 blocking_issues=[
                     {
-                        "code": "LIVE_SMOKE_FAILED",
-                        "message": f"{exc.__class__.__name__}: {exc}",
+                        "code": result["failure_code"],
+                        "message": result["failure_message"],
                     }
                 ],
+                next_actions=result.get("next_actions", []),
             )
         )
         return 1
-    write_json(envelope("live_smoke_complete", data=result, blocking_issues=[] if result["ok"] else [{"code": "NO_CANDIDATES", "message": "Live smoke produced no candidates."}]))
+    write_json(
+        envelope(
+            "live_smoke_complete",
+            data=result,
+            blocking_issues=[] if result["ok"] else [{"code": "NO_CANDIDATES", "message": "Live smoke produced no candidates."}],
+            next_actions=result.get("next_actions", []),
+        )
+    )
     return 0 if result["ok"] else 1
 
 
@@ -1149,6 +1170,7 @@ def cmd_live_smoke_suite(args: argparse.Namespace) -> int:
             data=result,
             blocking_issues=[] if result["ok"] else [{"code": "LIVE_SMOKE_SUITE_FAILED", "message": "One or more live smoke queries failed."}],
             warnings=warnings,
+            next_actions=result.get("next_actions", []),
         )
     )
     return 0 if result["ok"] else 1

@@ -26,6 +26,11 @@ The suite writes `--write-manifest` only when all selected live queries
 succeed. If any endpoint returns an error or no candidates, the command remains
 blocking and reports `CACHE_MANIFEST_NOT_WRITTEN` instead of creating a
 misleading reviewed manifest.
+Failures include `failure_code`, `failure_summary`, and `next_actions`. Treat
+`LIVE_SMOKE_RATE_LIMITED` as an endpoint blocker: rerun the cited item with the
+suggested slower command before preserving a reviewed manifest. Treat
+`NO_CANDIDATES` as a lookup/provenance review item, not as external
+verification.
 
 Review the output before preserving the manifest:
 

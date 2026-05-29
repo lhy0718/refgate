@@ -398,6 +398,10 @@ through `--manifest` is network-free and does not require `--live`.
 `--write-manifest` writes only after every selected live query succeeds; partial
 live failures return `CACHE_MANIFEST_NOT_WRITTEN` as a warning and keep the
 suite blocking.
+Failed live checks surface `failure_code`, `failure_summary`, and retry or
+review `next_actions`; rate-limited arXiv checks recommend a slower cached
+single-citation retry instead of letting agents treat a partial suite as
+reviewed.
 Use `--prefer-cache` with reviewed cache records to reduce repeated live calls;
 `--min-interval-seconds`, `--retry`, and `--retry-after-seconds` provide basic
 rate-limit backoff.

@@ -227,6 +227,10 @@ comparison is network-free and does not require `--live`.
 `--write-manifest` writes only after every selected live query succeeds; if a
 live endpoint returns an error or no candidates, report the blocker and rerun a
 smaller or cached probe before preserving reviewed live evidence.
+Read `failure_code`, `failure_summary`, and `next_actions` on failed live
+checks. For `LIVE_SMOKE_RATE_LIMITED`, execute the suggested slower
+single-citation retry or report the rate-limit blocker; do not claim external
+verification from a partial live-smoke suite.
 
 ## Next Actions
 

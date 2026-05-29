@@ -72,6 +72,7 @@ become the source of truth.
 - Batch live-smoke suite manifest comparison without `--live`
 - Mixed-source live-smoke suite mode for agent-run multi-venue probes
 - Reviewed live-smoke manifest writes gated on full selected-suite success
+- Source-aware live-smoke failure summaries and retry/review next actions
 - Reviewed-cache-first live smoke, retry, and interval controls for rate limits
 - Source text validation command for extracted text and optional PDF paths
 - Venue labeling for direct public PDF URLs in source download plans

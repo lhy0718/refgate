@@ -346,6 +346,10 @@ items. Each query or resolver-assist work item may set `source` or
 `live-smoke-suite --write-manifest` writes the reviewed manifest only when all
 selected live queries succeed; partial endpoint failures keep the suite
 blocking and skip the manifest.
+Failed live checks include `failure_code`, `failure_summary`, and `next_actions`
+so agents can distinguish rate limits from no-candidate lookups. For example,
+an arXiv 429 yields a slower per-citation retry command with `--prefer-cache`,
+larger `--min-interval-seconds`, and retry backoff.
 
 Do not commit `.refgate/cache` or reviewed cache manifests to this public
 repository. See `docs/live_smoke_reviewed_manifest.md` for the reviewed

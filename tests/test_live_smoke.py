@@ -1,4 +1,5 @@
 import json
+from urllib.error import HTTPError
 
 from refgate.cache import RawRecord, write_raw_record
 from refgate.cli import main
@@ -183,6 +184,88 @@ def test_run_live_smoke_suite_keeps_default_source_for_empty_query_list():
     assert result["source"] == "arxiv"
     assert result["query_count"] == 0
     assert result["ok"] is False
+
+
+def test_run_live_smoke_reports_no_candidate_next_action_without_network(tmp_path):
+    from refgate.live_smoke import run_live_smoke
+
+    result = run_live_smoke(
+        "acl",
+        PaperQuery(query_id="missing", citation_key="missing2026", title="A Missing Fixture Paper"),
+        cache_root=tmp_path / "cache",
+    )
+
+    assert result["ok"] is False
+    assert result["failure_code"] == "NO_CANDIDATES"
+    assert result["next_actions"][0]["code"] == "REVIEW_LIVE_SMOKE_NO_CANDIDATES"
+    assert result["next_actions"][0]["citation_key"] == "missing2026"
+
+
+def test_live_smoke_suite_reports_rate_limit_retry_action(monkeypatch, tmp_path):
+    from refgate.live_smoke import LiveSmokeQueryItem, run_live_smoke_suite_items
+
+    query = PaperQuery(
+        query_id="vaswani2017attention",
+        citation_key="vaswani2017attention",
+        title="Attention Is All You Need",
+        arxiv_id="1706.03762",
+    )
+
+    def fake_run_live_smoke(*_args, **_kwargs):
+        raise HTTPError("https://export.arxiv.org/api/query", 429, "Too Many Requests", hdrs=None, fp=None)
+
+    monkeypatch.setattr("refgate.live_smoke.run_live_smoke", fake_run_live_smoke)
+
+    result = run_live_smoke_suite_items(
+        [LiveSmokeQueryItem(source="arxiv", query=query)],
+        cache_root=tmp_path / "cache",
+        prefer_cache=False,
+        min_interval_seconds=1,
+        retry=1,
+        retry_after_seconds=2,
+    )
+
+    action = result["next_actions"][0]
+    assert result["ok"] is False
+    assert result["failure_summary"][0]["code"] == "LIVE_SMOKE_RATE_LIMITED"
+    assert result["results"][0]["failure_code"] == "LIVE_SMOKE_RATE_LIMITED"
+    assert action["code"] == "RETRY_LIVE_SMOKE_RATE_LIMITED"
+    assert action["source"] == "arxiv"
+    assert "--prefer-cache" in action["command"]
+    assert "--min-interval-seconds 30" in action["command"]
+    assert "--retry 3" in action["command"]
+    assert "--retry-after-seconds 60" in action["command"]
+
+
+def test_cli_live_smoke_failed_exposes_next_action(monkeypatch, tmp_path, capsys):
+    def fake_run_live_smoke(*_args, **_kwargs):
+        raise HTTPError("https://export.arxiv.org/api/query", 429, "Too Many Requests", hdrs=None, fp=None)
+
+    monkeypatch.setattr("refgate.cli.run_live_smoke", fake_run_live_smoke)
+
+    exit_code = main(
+        [
+            "live-smoke",
+            "--source",
+            "arxiv",
+            "--title",
+            "Attention Is All You Need",
+            "--arxiv-id",
+            "1706.03762",
+            "--citation-key",
+            "vaswani2017attention",
+            "--cache-root",
+            str(tmp_path / "cache"),
+            "--live",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["blocking_issues"][0]["code"] == "LIVE_SMOKE_RATE_LIMITED"
+    assert payload["next_actions"][0]["code"] == "RETRY_LIVE_SMOKE_RATE_LIMITED"
+    assert payload["data"]["failure_code"] == "LIVE_SMOKE_RATE_LIMITED"
 
 
 def test_cli_live_smoke_suite_requires_live_flag(tmp_path, capsys):
