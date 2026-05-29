@@ -216,7 +216,14 @@ Use live smoke only when explicitly requested:
 ```bash
 refgate live-smoke --source arxiv --title "Attention Is All You Need" --live --json
 refgate live-smoke-suite --queries REFGATE_QUERIES_JSON --source arxiv --cache-root .refgate/cache --max-queries 3 --prefer-cache --min-interval-seconds 3 --retry 2 --retry-after-seconds 10 --write-manifest .refgate/cache_manifest.reviewed.json --live --json
+refgate live-smoke-suite --queries REFGATE_QUERIES_JSON --per-query-source --cache-root .refgate/cache --max-queries 3 --live --json
+refgate live-smoke-suite --queries REFGATE_QUERIES_JSON --source arxiv --cache-root .refgate/cache --manifest .refgate/cache_manifest.reviewed.json --json
 ```
+
+Use `--per-query-source` for mixed venue batches from resolver-assist output.
+It reads `source`, `live_smoke_source`, or the first `recommended_sources`
+entry from each query/work item, with `--source` as fallback. `--manifest`
+comparison is network-free and does not require `--live`.
 
 ## Next Actions
 

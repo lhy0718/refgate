@@ -68,6 +68,43 @@ def test_cli_live_smoke_writes_manifest_without_network(tmp_path, capsys):
     assert saved["records"][0]["body_sha256"] == record.body_sha256
 
 
+def test_cli_live_smoke_suite_manifest_compare_is_network_free(tmp_path, capsys):
+    record = RawRecord(
+        source="pnas",
+        url="https://www.pnas.org/doi/10.1073/refgate.pnas",
+        status=200,
+        headers={},
+        body="fixture body",
+        fetched_at="2026-05-19T00:00:00+00:00",
+    )
+    write_raw_record(record, cache_root=tmp_path / "cache")
+    queries = tmp_path / "queries.json"
+    queries.write_text(json.dumps([{"query_id": "q1", "title": "A Fixture Paper", "source": "pnas"}]), encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps({"records": [{"source": "pnas", "url": record.url, "body_sha256": record.body_sha256}]}),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "live-smoke-suite",
+            "--queries",
+            str(queries),
+            "--cache-root",
+            str(tmp_path / "cache"),
+            "--manifest",
+            str(manifest),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "cache_manifest_compared"
+    assert payload["data"]["comparison"]["ok"] is True
+
+
 def test_cached_fetcher_reports_only_cache_paths_used_by_current_request(tmp_path):
     current = RawRecord(
         source="crossref",
@@ -138,6 +175,16 @@ def test_live_smoke_supports_fixture_backed_official_venue_sources(tmp_path):
     assert result["cache_paths"] == [str(cache_path)]
 
 
+def test_run_live_smoke_suite_keeps_default_source_for_empty_query_list():
+    from refgate.live_smoke import run_live_smoke_suite
+
+    result = run_live_smoke_suite([], source="arxiv")
+
+    assert result["source"] == "arxiv"
+    assert result["query_count"] == 0
+    assert result["ok"] is False
+
+
 def test_cli_live_smoke_suite_requires_live_flag(tmp_path, capsys):
     queries = tmp_path / "queries.json"
     queries.write_text(json.dumps([{"query_id": "q1", "title": "A Fixture Paper"}]), encoding="utf-8")
@@ -189,3 +236,109 @@ def test_cli_live_smoke_suite_accepts_resolver_assist_output_and_max_queries(mon
     assert exit_code == 0
     assert payload["data"]["query_count"] == 2
     assert payload["data"]["run_query_count"] == 1
+
+
+def test_cli_live_smoke_suite_can_use_per_query_sources(monkeypatch, tmp_path, capsys):
+    queries = tmp_path / "mixed_queries.json"
+    queries.write_text(
+        json.dumps(
+            [
+                {
+                    "query_id": "pnas-fixture",
+                    "citation_key": "smith2026",
+                    "title": "Refgate Fixture: PNAS Official Record",
+                    "source": "pnas",
+                },
+                {
+                    "query_id": "mdpi-fixture",
+                    "citation_key": "jones2026",
+                    "title": "Refgate Fixture: MDPI Official Record",
+                    "live_smoke_source": "mdpi",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_suite(items, *, cache_root, **_kwargs):
+        assert [item.source for item in items] == ["pnas", "mdpi"]
+        assert [item.query.citation_key for item in items] == ["smith2026", "jones2026"]
+        assert _kwargs["max_queries"] == 2
+        return {
+            "source": "mixed",
+            "sources": ["mdpi", "pnas"],
+            "source_counts": {"mdpi": 1, "pnas": 1},
+            "query_count": 2,
+            "run_query_count": 2,
+            "skipped_query_count": 0,
+            "ok_count": 2,
+            "results": [],
+            "ok": True,
+        }
+
+    monkeypatch.setattr("refgate.cli.run_live_smoke_suite_items", fake_suite)
+
+    exit_code = main(
+        [
+            "live-smoke-suite",
+            "--queries",
+            str(queries),
+            "--source",
+            "arxiv",
+            "--per-query-source",
+            "--max-queries",
+            "2",
+            "--live",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["data"]["source"] == "mixed"
+    assert payload["data"]["source_counts"] == {"mdpi": 1, "pnas": 1}
+
+
+def test_cli_live_smoke_suite_can_use_resolver_recommended_source(monkeypatch, tmp_path, capsys):
+    queries = tmp_path / "resolver_assist.json"
+    queries.write_text(
+        json.dumps(
+            {
+                "work_items": [
+                    {
+                        "query": {
+                            "query_id": "q1",
+                            "citation_key": "smith2026",
+                            "title": "A Fixture Paper",
+                        },
+                        "recommended_sources": ["science", "crossref"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_suite(items, *, cache_root, **_kwargs):
+        assert [item.source for item in items] == ["science"]
+        return {"source": "science", "query_count": 1, "run_query_count": 1, "skipped_query_count": 0, "ok_count": 1, "results": [], "ok": True}
+
+    monkeypatch.setattr("refgate.cli.run_live_smoke_suite_items", fake_suite)
+
+    exit_code = main(["live-smoke-suite", "--queries", str(queries), "--source", "arxiv", "--per-query-source", "--live", "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["data"]["source"] == "science"
+
+
+def test_cli_live_smoke_suite_rejects_unsupported_per_query_source(tmp_path, capsys):
+    queries = tmp_path / "queries.json"
+    queries.write_text(json.dumps([{"query_id": "q1", "title": "A Fixture Paper", "source": "private_database"}]), encoding="utf-8")
+
+    exit_code = main(["live-smoke-suite", "--queries", str(queries), "--per-query-source", "--live", "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["blocking_issues"][0]["code"] == "UNSUPPORTED_SOURCE"
+    assert payload["blocking_issues"][0]["evidence"] == ["private_database"]

@@ -69,6 +69,8 @@ become the source of truth.
 - Source bundle evidence suggestion across multiple reviewed text/PDF inputs
 - Codex review bundle export/import for claim-to-source review assistance
 - Batch live-smoke suite with reviewed manifest write support
+- Batch live-smoke suite manifest comparison without `--live`
+- Mixed-source live-smoke suite mode for agent-run multi-venue probes
 - Reviewed-cache-first live smoke, retry, and interval controls for rate limits
 - Source text validation command for extracted text and optional PDF paths
 - Venue labeling for direct public PDF URLs in source download plans

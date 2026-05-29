@@ -149,7 +149,9 @@ python -m refgate fixture-matrix --queries tests/fixtures/reference_priority_que
 python -m refgate live-smoke --cache-root .refgate/cache --manifest tests/fixtures/cache_manifest.example.json --json
 python -m refgate live-smoke --cache-root .refgate/cache --write-manifest .refgate/cache_manifest.reviewed.json --json
 python -m refgate live-smoke-suite --queries path/to/refgate_queries.json --source arxiv --cache-root .refgate/cache --max-queries 3 --write-manifest .refgate/cache_manifest.reviewed.json --live --json
+python -m refgate live-smoke-suite --queries path/to/refgate_queries.json --per-query-source --cache-root .refgate/cache --max-queries 3 --live --json
 python -m refgate live-smoke-suite --queries path/to/refgate_queries.json --source arxiv --cache-root .refgate/cache --prefer-cache --min-interval-seconds 3 --retry 2 --retry-after-seconds 10 --live --json
+python -m refgate live-smoke-suite --queries path/to/refgate_queries.json --source arxiv --cache-root .refgate/cache --manifest .refgate/cache_manifest.reviewed.json --json
 python -m refgate paper-agents-template --tex paper.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --report refgate_audit.md --output AGENTS.refgate.md --json
 python -m refgate publish-check --root . --json
 python -m refgate render-report --lock tests/fixtures/refgate.lock.json --output examples/reference-fixture/sample_refgate_audit.md
@@ -333,8 +335,14 @@ manifest:
 ```bash
 python -m refgate live-smoke --source arxiv --title "Attention Is All You Need" --live --json
 python -m refgate live-smoke-suite --queries refgate_queries.json --source arxiv --cache-root .refgate/cache --prefer-cache --min-interval-seconds 3 --retry 2 --retry-after-seconds 10 --write-manifest .refgate/cache_manifest.reviewed.json --live --json
+python -m refgate live-smoke-suite --queries refgate_queries.json --per-query-source --cache-root .refgate/cache --max-queries 3 --live --json
 python -m refgate live-smoke-suite --queries refgate_queries.json --source arxiv --cache-root .refgate/cache --manifest .refgate/cache_manifest.reviewed.json --json
 ```
+
+Use `--per-query-source` when `refgate_queries.json` contains mixed venue work
+items. Each query or resolver-assist work item may set `source` or
+`live_smoke_source`; resolver-assist output can also use the first
+`recommended_sources` item. The normal `--source` value remains the fallback.
 
 Do not commit `.refgate/cache` or reviewed cache manifests to this public
 repository. See `docs/live_smoke_reviewed_manifest.md` for the reviewed

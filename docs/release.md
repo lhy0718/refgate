@@ -45,6 +45,7 @@ source tree:
 
 ```bash
 refgate live-smoke-suite --queries refgate_queries.json --source arxiv --cache-root .refgate/cache --max-queries 3 --prefer-cache --min-interval-seconds 3 --retry 2 --retry-after-seconds 10 --write-manifest .refgate/cache_manifest.reviewed.json --live --json
+refgate live-smoke-suite --queries refgate_queries.json --per-query-source --cache-root .refgate/cache --max-queries 3 --prefer-cache --min-interval-seconds 3 --retry 2 --retry-after-seconds 10 --write-manifest .refgate/cache_manifest.reviewed.json --live --json
 ```
 
 Keep `.refgate/cache` and reviewed manifests out of the public repository. See

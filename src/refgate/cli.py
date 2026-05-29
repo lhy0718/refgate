@@ -19,7 +19,14 @@ from .claim_source_check import run_claim_source_check
 from .codex_review import import_codex_review, write_codex_review_bundle
 from .fixture_matrix import validate_fixture_matrix
 from .handoff import write_handoff
-from .live_smoke import cache_manifest, compare_cache_manifest, run_live_smoke, run_live_smoke_suite
+from .live_smoke import (
+    LiveSmokeQueryItem,
+    cache_manifest,
+    compare_cache_manifest,
+    run_live_smoke,
+    run_live_smoke_suite,
+    run_live_smoke_suite_items,
+)
 from .lockfile import build_lock_entry, load_lockfile, merge_lock_entry, write_lockfile
 from .models import AuditIssue, AuthorityRecord, BibtexRecord, CandidateRecord, Lockfile, PaperQuery, ResolverDecision
 from .next_actions import (
@@ -974,7 +981,96 @@ def _load_queries(path: str | Path) -> list[PaperQuery]:
     return [PaperQuery.from_dict(item) for item in data]
 
 
+def _live_smoke_source_from_payload(
+    payload: dict[str, Any],
+    *,
+    default_source: str,
+    per_query_source: bool,
+) -> str:
+    if not per_query_source:
+        return default_source
+    source = payload.get("live_smoke_source") or payload.get("source")
+    if not source:
+        recommended = payload.get("recommended_sources") or []
+        if isinstance(recommended, list) and recommended:
+            source = recommended[0]
+    return str(source or default_source)
+
+
+def _live_smoke_query_item_from_payload(
+    payload: dict[str, Any],
+    *,
+    default_source: str,
+    per_query_source: bool,
+) -> LiveSmokeQueryItem | None:
+    query_payload = payload.get("query") if isinstance(payload.get("query"), dict) else payload
+    if not isinstance(query_payload, dict):
+        return None
+    source = _live_smoke_source_from_payload(payload, default_source=default_source, per_query_source=per_query_source)
+    if per_query_source and source == default_source:
+        source = _live_smoke_source_from_payload(query_payload, default_source=default_source, per_query_source=True)
+    return LiveSmokeQueryItem(source=source, query=PaperQuery.from_dict(query_payload))
+
+
+def _load_live_smoke_query_items(
+    path: str | Path,
+    *,
+    default_source: str,
+    per_query_source: bool,
+) -> list[LiveSmokeQueryItem]:
+    data = load_json(path)
+    if isinstance(data, dict) and "work_items" in data:
+        payloads = [item for item in data.get("work_items", []) if item.get("query")]
+    elif isinstance(data, dict):
+        payloads = [data]
+    else:
+        payloads = list(data)
+    items = [
+        item
+        for item in (
+            _live_smoke_query_item_from_payload(payload, default_source=default_source, per_query_source=per_query_source)
+            for payload in payloads
+            if isinstance(payload, dict)
+        )
+        if item is not None
+    ]
+    return items
+
+
 def cmd_live_smoke_suite(args: argparse.Namespace) -> int:
+    if args.manifest:
+        if not Path(args.manifest).exists():
+            write_json(
+                envelope(
+                    "manifest_missing",
+                    blocking_issues=[
+                        {
+                            "code": "CACHE_MANIFEST_MISSING",
+                            "message": "Cache manifest file does not exist.",
+                            "evidence": [args.manifest],
+                        }
+                    ],
+                )
+            )
+            return 1
+        actual = cache_manifest(args.cache_root)
+        expected = load_json(args.manifest)
+        comparison = compare_cache_manifest(actual, expected)
+        write_json(
+            envelope(
+                "cache_manifest_compared",
+                data={"actual": actual, "comparison": comparison},
+                blocking_issues=[]
+                if comparison["ok"]
+                else [
+                    {
+                        "code": "CACHE_MANIFEST_MISMATCH",
+                        "message": "Cached live response checksums differ from expected manifest.",
+                    }
+                ],
+            )
+        )
+        return 0 if comparison["ok"] else 1
     if not args.live:
         write_json(
             envelope(
@@ -988,17 +1084,45 @@ def cmd_live_smoke_suite(args: argparse.Namespace) -> int:
             )
         )
         return 1
-    queries = _load_queries(args.queries)
-    result = run_live_smoke_suite(
-        queries,
-        source=args.source,
-        cache_root=args.cache_root,
-        prefer_cache=args.prefer_cache,
-        min_interval_seconds=args.min_interval_seconds,
-        retry=args.retry,
-        retry_after_seconds=args.retry_after_seconds,
-        max_queries=args.max_queries,
-    )
+    if args.per_query_source:
+        items = _load_live_smoke_query_items(args.queries, default_source=args.source, per_query_source=True)
+        unsupported_sources = sorted({item.source for item in items if item.source not in DISCOVERY_SOURCES})
+        if unsupported_sources:
+            write_json(
+                envelope(
+                    "unsupported_source",
+                    blocking_issues=[
+                        {
+                            "code": "UNSUPPORTED_SOURCE",
+                            "message": "One or more per-query live smoke sources are unsupported.",
+                            "evidence": unsupported_sources,
+                        }
+                    ],
+                )
+            )
+            return 1
+        result = run_live_smoke_suite_items(
+            items,
+            cache_root=args.cache_root,
+            prefer_cache=args.prefer_cache,
+            min_interval_seconds=args.min_interval_seconds,
+            retry=args.retry,
+            retry_after_seconds=args.retry_after_seconds,
+            max_queries=args.max_queries,
+            default_source=args.source,
+        )
+    else:
+        queries = _load_queries(args.queries)
+        result = run_live_smoke_suite(
+            queries,
+            source=args.source,
+            cache_root=args.cache_root,
+            prefer_cache=args.prefer_cache,
+            min_interval_seconds=args.min_interval_seconds,
+            retry=args.retry,
+            retry_after_seconds=args.retry_after_seconds,
+            max_queries=args.max_queries,
+        )
     if args.write_manifest:
         manifest = cache_manifest(args.cache_root)
         Path(args.write_manifest).parent.mkdir(parents=True, exist_ok=True)
@@ -1496,7 +1620,9 @@ def build_parser() -> argparse.ArgumentParser:
     live_smoke_suite_parser.add_argument("--source", choices=DISCOVERY_SOURCES, default="arxiv")
     live_smoke_suite_parser.add_argument("--queries", required=True)
     live_smoke_suite_parser.add_argument("--cache-root", default=".refgate/cache")
+    live_smoke_suite_parser.add_argument("--manifest")
     live_smoke_suite_parser.add_argument("--write-manifest")
+    live_smoke_suite_parser.add_argument("--per-query-source", action="store_true")
     live_smoke_suite_parser.add_argument("--prefer-cache", action="store_true")
     live_smoke_suite_parser.add_argument("--min-interval-seconds", type=float, default=0)
     live_smoke_suite_parser.add_argument("--retry", type=int, default=0)

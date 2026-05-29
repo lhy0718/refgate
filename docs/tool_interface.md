@@ -346,6 +346,8 @@ Fixture and live-smoke commands:
 - `fixture-matrix --queries reference_priority_queries.json --candidates reference_priority_candidates.json --json`
 - `live-smoke --source arxiv --title "..." --live --json`
 - `live-smoke-suite --queries refgate_queries.json --source arxiv --cache-root .refgate/cache --max-queries 3 --prefer-cache --min-interval-seconds 3 --retry 2 --retry-after-seconds 10 --write-manifest reviewed-cache-manifest.json --live --json`
+- `live-smoke-suite --queries refgate_queries.json --per-query-source --cache-root .refgate/cache --max-queries 3 --live --json`
+- `live-smoke-suite --queries refgate_queries.json --source arxiv --cache-root .refgate/cache --manifest reviewed-cache-manifest.json --json`
 - `live-smoke --cache-root .refgate/cache --write-manifest reviewed-cache-manifest.json --json`
 - `live-smoke --cache-root .refgate/cache --manifest expected-cache-manifest.json --json`
 - `validate-source-text --text extracted.txt --json`
@@ -389,7 +391,10 @@ successful update.
 `live-smoke` must not access the network unless `--live` is present. Manifest
 comparison is network-free and compares cached response checksums.
 `live-smoke-suite` is also live-gated and accepts either a query list or the
-output of `resolver-assist`.
+output of `resolver-assist`. Use `--per-query-source` for mixed venue batches:
+each query/work item may set `source`, `live_smoke_source`, or
+`recommended_sources`, and `--source` is only the fallback. Manifest comparison
+through `--manifest` is network-free and does not require `--live`.
 Use `--prefer-cache` with reviewed cache records to reduce repeated live calls;
 `--min-interval-seconds`, `--retry`, and `--retry-after-seconds` provide basic
 rate-limit backoff.

@@ -13,6 +13,16 @@ Use a small live batch first:
 refgate live-smoke-suite --queries refgate_queries.json --source arxiv --cache-root .refgate/cache --max-queries 3 --prefer-cache --min-interval-seconds 3 --retry 2 --retry-after-seconds 10 --write-manifest .refgate/cache_manifest.reviewed.json --live --json
 ```
 
+For mixed-venue resolver work items, let each query choose its source:
+
+```bash
+refgate live-smoke-suite --queries refgate_queries.json --per-query-source --cache-root .refgate/cache --max-queries 3 --prefer-cache --min-interval-seconds 3 --retry 2 --retry-after-seconds 10 --write-manifest .refgate/cache_manifest.reviewed.json --live --json
+```
+
+`--per-query-source` reads `source`, `live_smoke_source`, or the first
+`recommended_sources` entry from each query/work item. `--source` remains the
+fallback when a query does not carry a source hint.
+
 Review the output before preserving the manifest:
 
 - every query has the expected source and citation key;
@@ -32,6 +42,9 @@ Checksum comparison is network-free:
 ```bash
 refgate live-smoke-suite --queries refgate_queries.json --source arxiv --cache-root .refgate/cache --manifest .refgate/cache_manifest.reviewed.json --json
 ```
+
+Manifest comparison does not require `--live`, including for
+`live-smoke-suite`. It compares cached response checksums only.
 
 If comparison fails, inspect the changed cache entry and decide whether it is an
 expected endpoint update, a parser regression, or a reference provenance

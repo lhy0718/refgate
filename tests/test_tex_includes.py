@@ -74,6 +74,7 @@ def test_paper_audit_uses_included_citations_for_bib_consistency(tmp_path, capsy
     lock = tmp_path / "refgate.lock.json"
     claims = tmp_path / "claims.tsv"
     report = tmp_path / "refgate_audit.md"
+    queries = tmp_path / "refgate_queries.json"
     tex.write_text("\\input{related}\n", encoding="utf-8")
     section.write_text("Included paper claim cites AgentDojo \\cite{debenedetti2024agentdojo}.\n", encoding="utf-8")
     bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
@@ -92,6 +93,8 @@ def test_paper_audit_uses_included_citations_for_bib_consistency(tmp_path, capsy
             str(claims),
             "--report",
             str(report),
+            "--resolver-output",
+            str(queries),
             "--submission",
             "--json",
         ]

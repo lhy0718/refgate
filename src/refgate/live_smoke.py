@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError
@@ -16,6 +17,12 @@ from .adapters.semantic_scholar import SemanticScholarAdapter
 from .adapters.venues import ADAPTERS as VENUE_ADAPTERS
 from .cache import RawRecord, raw_record_path, read_raw_record, utc_now, write_raw_record
 from .models import PaperQuery
+
+
+@dataclass(frozen=True)
+class LiveSmokeQueryItem:
+    source: str
+    query: PaperQuery
 
 
 def cached_fetcher(
@@ -167,13 +174,37 @@ def run_live_smoke_suite(
     retry_after_seconds: float = 0,
     max_queries: int | None = None,
 ) -> dict[str, Any]:
+    items = [LiveSmokeQueryItem(source=source, query=query) for query in queries]
+    return run_live_smoke_suite_items(
+        items,
+        cache_root=cache_root,
+        prefer_cache=prefer_cache,
+        min_interval_seconds=min_interval_seconds,
+        retry=retry,
+        retry_after_seconds=retry_after_seconds,
+        max_queries=max_queries,
+        default_source=source,
+    )
+
+
+def run_live_smoke_suite_items(
+    items: list[LiveSmokeQueryItem],
+    *,
+    cache_root: str | Path = ".refgate/cache",
+    prefer_cache: bool = False,
+    min_interval_seconds: float = 0,
+    retry: int = 0,
+    retry_after_seconds: float = 0,
+    max_queries: int | None = None,
+    default_source: str | None = None,
+) -> dict[str, Any]:
     results = []
-    selected_queries = queries[:max_queries] if max_queries is not None else queries
-    for query in selected_queries:
+    selected_items = items[:max_queries] if max_queries is not None else items
+    for item in selected_items:
         try:
             result = run_live_smoke(
-                source,
-                query,
+                item.source,
+                item.query,
                 cache_root=cache_root,
                 prefer_cache=prefer_cache,
                 min_interval_seconds=min_interval_seconds,
@@ -182,8 +213,8 @@ def run_live_smoke_suite(
             )
         except Exception as exc:
             result = {
-                "source": source,
-                "query": query.to_dict(),
+                "source": item.source,
+                "query": item.query.to_dict(),
                 "candidate_count": 0,
                 "candidates": [],
                 "cache_paths": [],
@@ -191,11 +222,18 @@ def run_live_smoke_suite(
                 "error": f"{exc.__class__.__name__}: {exc}",
             }
         results.append(result)
+    sources = sorted({item.source for item in items})
+    selected_sources = sorted({item.source for item in selected_items})
+    source_counts = {source: sum(1 for item in items if item.source == source) for source in sources}
+    source_label = sources[0] if len(sources) == 1 else ("mixed" if sources else default_source or "mixed")
     return {
-        "source": source,
-        "query_count": len(queries),
-        "run_query_count": len(selected_queries),
-        "skipped_query_count": max(0, len(queries) - len(selected_queries)),
+        "source": source_label,
+        "sources": sources,
+        "selected_sources": selected_sources,
+        "source_counts": source_counts,
+        "query_count": len(items),
+        "run_query_count": len(selected_items),
+        "skipped_query_count": max(0, len(items) - len(selected_items)),
         "ok_count": sum(1 for item in results if item.get("ok")),
         "results": results,
         "ok": bool(results) and all(item.get("ok") for item in results),
