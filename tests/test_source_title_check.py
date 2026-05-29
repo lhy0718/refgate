@@ -217,7 +217,10 @@ def test_paper_audit_blocks_when_mapped_source_title_mismatches_lock_title(tmp_p
     tex.write_text((FIXTURES / "manuscript.tex").read_text(encoding="utf-8"), encoding="utf-8")
     bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
     lock.write_text((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8"), encoding="utf-8")
-    claims.write_text((FIXTURES / "claims_checked.tsv").read_text(encoding="utf-8"), encoding="utf-8")
+    claims.write_text(
+        (FIXTURES / "claims_checked.tsv").read_text(encoding="utf-8").replace("Fixture evidence.", "Refgate verifies references."),
+        encoding="utf-8",
+    )
     (source_dir / "debenedetti2024agentdojo.txt").write_text(
         "[page 1]\n"
         "Securing Large Language Model Agents via Structured Graph Abstraction\n"
@@ -269,7 +272,10 @@ def test_paper_audit_accepts_reviewed_source_title_mismatch(tmp_path, capsys):
     tex.write_text((FIXTURES / "manuscript.tex").read_text(encoding="utf-8"), encoding="utf-8")
     bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
     lock.write_text((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8"), encoding="utf-8")
-    claims.write_text((FIXTURES / "claims_checked.tsv").read_text(encoding="utf-8"), encoding="utf-8")
+    claims.write_text(
+        (FIXTURES / "claims_checked.tsv").read_text(encoding="utf-8").replace("Fixture evidence.", "Refgate verifies references."),
+        encoding="utf-8",
+    )
     source = source_dir / "debenedetti2024agentdojo.txt"
     observed_title = "Securing Large Language Model Agents via Structured Graph Abstraction"
     expected_title = "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents"

@@ -420,6 +420,7 @@ def test_cli_paper_audit_can_build_source_map_from_citation_key_files(tmp_path, 
     rows = list(csv.DictReader(claims.open(newline="", encoding="utf-8"), delimiter="\t"))
     source_map_text = source_map.read_text(encoding="utf-8")
     assert exit_code == 1
+    assert any(issue["code"] == "CLAIM_STATUS_NOT_FINAL" for issue in payload["blocking_issues"])
     assert payload["data"]["source_map"]["source_count"] == 1
     assert payload["data"]["claim_source_check"]["updated"] == 1
     assert payload["data"]["claim_review"] == str(claim_review)
@@ -464,6 +465,7 @@ def test_cli_paper_audit_can_build_source_map_from_citation_key_files(tmp_path, 
     )
     second_payload = json.loads(capsys.readouterr().out)
     assert second_exit == 1
+    assert any(issue["code"] == "CLAIM_STATUS_NOT_FINAL" for issue in second_payload["blocking_issues"])
     assert second_payload["data"]["claim_source_check"]["updated"] == 0
     assert any(action["code"] == "REVIEW_CLAIM_EVIDENCE" for action in second_payload["next_actions"])
 
@@ -514,6 +516,7 @@ def test_cli_paper_audit_claim_review_summarizes_no_match_sources(tmp_path, caps
     payload = json.loads(capsys.readouterr().out)
     review = claim_review.read_text(encoding="utf-8")
     assert exit_code == 1
+    assert any(issue["code"] == "CLAIM_EVIDENCE_NOT_FOUND_IN_SOURCE" for issue in payload["blocking_issues"])
     assert payload["data"]["claim_source_check"]["updated"] == 0
     assert payload["data"]["claim_source_check"]["no_match_claims"][0]["claim_id"] == "claim-0001"
     no_match_action = next(action for action in payload["next_actions"] if action["code"] == "REVIEW_NO_MATCH_CLAIMS")

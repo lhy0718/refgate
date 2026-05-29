@@ -4,7 +4,7 @@ import csv
 import os
 import shlex
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .assist import build_resolver_assist
 from .audit import audit_bibliography
@@ -60,6 +60,16 @@ def summarize_issues(issues: list[Any]) -> list[dict[str, Any]]:
         key_summary = summarize_citation_keys(summary.pop("citation_keys"))
         summary.update(key_summary)
     return list(summaries.values())
+
+
+def _issue_from_payload(payload: dict[str, Any], *, severity: Literal["blocking", "warning"]) -> AuditIssue:
+    return AuditIssue(
+        code=str(payload.get("code", "")),
+        message=str(payload.get("message", "")),
+        severity=severity,
+        citation_key=payload.get("citation_key"),
+        evidence=[str(item) for item in payload.get("evidence", [])],
+    )
 
 
 def _claim_citation_keys(claims_path: Path) -> list[str]:
@@ -653,9 +663,24 @@ def run_paper_audit(
     issues = audit_bibliography(bib_text, lockfile, submission=submission)
     issues.extend(audit_tex_bib_consistency(tex_text, bib_text, submission=submission))
     issues.extend(audit_claims_table(claims_path, submission=submission))
+    if claim_source_check:
+        issues.extend(
+            _issue_from_payload(issue, severity="blocking")
+            for issue in claim_source_check.get("blocking_issues", [])
+        )
+        issues.extend(
+            _issue_from_payload(issue, severity="warning")
+            for issue in claim_source_check.get("warnings", [])
+        )
     if source_title_check:
-        issues.extend(AuditIssue(**issue) for issue in source_title_check.get("blocking_issues", []))
-        issues.extend(AuditIssue(**issue) for issue in source_title_check.get("warnings", []))
+        issues.extend(
+            _issue_from_payload(issue, severity="blocking")
+            for issue in source_title_check.get("blocking_issues", [])
+        )
+        issues.extend(
+            _issue_from_payload(issue, severity="warning")
+            for issue in source_title_check.get("warnings", [])
+        )
     blocking = [issue for issue in issues if issue.severity == "blocking"]
     warnings = [issue for issue in issues if issue.severity == "warning"]
 
