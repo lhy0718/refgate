@@ -343,6 +343,9 @@ Use `--per-query-source` when `refgate_queries.json` contains mixed venue work
 items. Each query or resolver-assist work item may set `source` or
 `live_smoke_source`; resolver-assist output can also use the first
 `recommended_sources` item. The normal `--source` value remains the fallback.
+`live-smoke-suite --write-manifest` writes the reviewed manifest only when all
+selected live queries succeed; partial endpoint failures keep the suite
+blocking and skip the manifest.
 
 Do not commit `.refgate/cache` or reviewed cache manifests to this public
 repository. See `docs/live_smoke_reviewed_manifest.md` for the reviewed

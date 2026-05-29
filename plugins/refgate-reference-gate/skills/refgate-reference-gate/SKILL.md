@@ -224,6 +224,9 @@ Use `--per-query-source` for mixed venue batches from resolver-assist output.
 It reads `source`, `live_smoke_source`, or the first `recommended_sources`
 entry from each query/work item, with `--source` as fallback. `--manifest`
 comparison is network-free and does not require `--live`.
+`--write-manifest` writes only after every selected live query succeeds; if a
+live endpoint returns an error or no candidates, report the blocker and rerun a
+smaller or cached probe before preserving reviewed live evidence.
 
 ## Next Actions
 

@@ -1123,16 +1123,32 @@ def cmd_live_smoke_suite(args: argparse.Namespace) -> int:
             retry_after_seconds=args.retry_after_seconds,
             max_queries=args.max_queries,
         )
-    if args.write_manifest:
+    warnings = []
+    if args.write_manifest and result["ok"]:
         manifest = cache_manifest(args.cache_root)
         Path(args.write_manifest).parent.mkdir(parents=True, exist_ok=True)
         Path(args.write_manifest).write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        result["manifest"] = {"path": args.write_manifest, "record_count": len(manifest.get("records", []))}
+        result["manifest"] = {"path": args.write_manifest, "record_count": len(manifest.get("records", [])), "written": True}
+    elif args.write_manifest:
+        result["manifest"] = {
+            "path": args.write_manifest,
+            "record_count": 0,
+            "written": False,
+            "reason": "suite_failed",
+        }
+        warnings.append(
+            {
+                "code": "CACHE_MANIFEST_NOT_WRITTEN",
+                "message": "Live smoke suite failed, so the reviewed cache manifest was not written.",
+                "evidence": [args.write_manifest],
+            }
+        )
     write_json(
         envelope(
             "live_smoke_suite_complete",
             data=result,
             blocking_issues=[] if result["ok"] else [{"code": "LIVE_SMOKE_SUITE_FAILED", "message": "One or more live smoke queries failed."}],
+            warnings=warnings,
         )
     )
     return 0 if result["ok"] else 1

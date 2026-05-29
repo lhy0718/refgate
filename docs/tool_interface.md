@@ -395,6 +395,9 @@ output of `resolver-assist`. Use `--per-query-source` for mixed venue batches:
 each query/work item may set `source`, `live_smoke_source`, or
 `recommended_sources`, and `--source` is only the fallback. Manifest comparison
 through `--manifest` is network-free and does not require `--live`.
+`--write-manifest` writes only after every selected live query succeeds; partial
+live failures return `CACHE_MANIFEST_NOT_WRITTEN` as a warning and keep the
+suite blocking.
 Use `--prefer-cache` with reviewed cache records to reduce repeated live calls;
 `--min-interval-seconds`, `--retry`, and `--retry-after-seconds` provide basic
 rate-limit backoff.

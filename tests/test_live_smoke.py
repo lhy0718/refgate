@@ -238,6 +238,95 @@ def test_cli_live_smoke_suite_accepts_resolver_assist_output_and_max_queries(mon
     assert payload["data"]["run_query_count"] == 1
 
 
+def test_cli_live_smoke_suite_writes_manifest_only_when_suite_passes(monkeypatch, tmp_path, capsys):
+    record = RawRecord(
+        source="acl",
+        url="https://aclanthology.org/N19-1423/",
+        status=200,
+        headers={},
+        body="fixture body",
+        fetched_at="2026-05-19T00:00:00+00:00",
+    )
+    write_raw_record(record, cache_root=tmp_path / "cache")
+    queries = tmp_path / "queries.json"
+    queries.write_text(json.dumps([{"query_id": "q1", "title": "A Fixture Paper"}]), encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+
+    def fake_suite(loaded_queries, *, source, cache_root, **_kwargs):
+        return {
+            "source": source,
+            "query_count": len(loaded_queries),
+            "run_query_count": 1,
+            "skipped_query_count": 0,
+            "ok_count": 1,
+            "results": [],
+            "ok": True,
+        }
+
+    monkeypatch.setattr("refgate.cli.run_live_smoke_suite", fake_suite)
+
+    exit_code = main(
+        [
+            "live-smoke-suite",
+            "--queries",
+            str(queries),
+            "--source",
+            "acl",
+            "--cache-root",
+            str(tmp_path / "cache"),
+            "--write-manifest",
+            str(manifest),
+            "--live",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    saved = json.loads(manifest.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert payload["data"]["manifest"]["written"] is True
+    assert saved["records"][0]["body_sha256"] == record.body_sha256
+
+
+def test_cli_live_smoke_suite_skips_manifest_when_suite_fails(monkeypatch, tmp_path, capsys):
+    queries = tmp_path / "queries.json"
+    queries.write_text(json.dumps([{"query_id": "q1", "title": "A Fixture Paper"}]), encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+
+    def fake_suite(loaded_queries, *, source, cache_root, **_kwargs):
+        return {
+            "source": source,
+            "query_count": len(loaded_queries),
+            "run_query_count": 1,
+            "skipped_query_count": 0,
+            "ok_count": 0,
+            "results": [{"source": source, "ok": False, "error": "HTTPError: 429"}],
+            "ok": False,
+        }
+
+    monkeypatch.setattr("refgate.cli.run_live_smoke_suite", fake_suite)
+
+    exit_code = main(
+        [
+            "live-smoke-suite",
+            "--queries",
+            str(queries),
+            "--source",
+            "arxiv",
+            "--write-manifest",
+            str(manifest),
+            "--live",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert manifest.exists() is False
+    assert payload["data"]["manifest"]["written"] is False
+    assert payload["warnings"][0]["code"] == "CACHE_MANIFEST_NOT_WRITTEN"
+
+
 def test_cli_live_smoke_suite_can_use_per_query_sources(monkeypatch, tmp_path, capsys):
     queries = tmp_path / "mixed_queries.json"
     queries.write_text(

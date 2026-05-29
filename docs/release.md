@@ -50,6 +50,9 @@ refgate live-smoke-suite --queries refgate_queries.json --per-query-source --cac
 
 Keep `.refgate/cache` and reviewed manifests out of the public repository. See
 `docs/live_smoke_reviewed_manifest.md` for the operating procedure.
+`live-smoke-suite --write-manifest` writes only when every selected live query
+succeeds, so endpoint rate limits remain a release-review blocker rather than a
+reviewed cache artifact.
 
 ## Release Candidate Tag
 

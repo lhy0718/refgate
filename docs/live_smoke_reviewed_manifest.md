@@ -22,6 +22,10 @@ refgate live-smoke-suite --queries refgate_queries.json --per-query-source --cac
 `--per-query-source` reads `source`, `live_smoke_source`, or the first
 `recommended_sources` entry from each query/work item. `--source` remains the
 fallback when a query does not carry a source hint.
+The suite writes `--write-manifest` only when all selected live queries
+succeed. If any endpoint returns an error or no candidates, the command remains
+blocking and reports `CACHE_MANIFEST_NOT_WRITTEN` instead of creating a
+misleading reviewed manifest.
 
 Review the output before preserving the manifest:
 
