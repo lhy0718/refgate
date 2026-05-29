@@ -13,7 +13,7 @@ from .auth import AUTH_SOURCES, auth_doctor, auth_status, save_auth_value, selec
 from .bibtex import parse_bibtex_entry, sha256_text
 from .bibtex_sync import sync_bibtex
 from .bootstrap import bootstrap_lock_from_bib, bootstrap_paper
-from .claim_audit import audit_claims_table, audit_tex_bib_consistency, render_claim_review_report, suggest_claim_evidence, suggest_claim_evidence_bundle, update_claim_stub_file
+from .claim_audit import audit_claims_table, audit_tex_bib_consistency, render_claim_review_report, suggest_claim_evidence, suggest_claim_evidence_bundle, update_claim_stub_file_from_sources
 from .claim_consistency import review_claim_consistency
 from .claim_source_check import run_claim_source_check
 from .codex_review import import_codex_review, write_codex_review_bundle
@@ -39,6 +39,7 @@ from .resolver import resolve
 from .source_text import build_vision_extraction_plan, validate_source_text
 from .source_title import check_source_titles, source_title_next_actions
 from .source_download import download_sources
+from .tex import load_tex_document
 from .adapters.acl import AclAdapter, candidate_from_acl_html
 from .adapters.arxiv import ArxivAdapter
 from .adapters.crossref import CrossrefAdapter
@@ -49,8 +50,63 @@ from .adapters.semantic_scholar import SemanticScholarAdapter
 from .adapters.venues import ADAPTERS as VENUE_ADAPTERS, candidate_from_venue_html
 
 
-DISCOVERY_SOURCES = ["aaai", "acl", "acm", "arxiv", "crossref", "cvf", "elsevier", "iclr", "ieee", "jmlr", "nature", "neurips", "openalex", "openreview", "pmlr", "sage", "semantic_scholar", "springer", "taylorfrancis", "usenix", "wiley"]
-OFFICIAL_BIBTEX_SOURCES = ["aaai", "acl", "acm", "arxiv", "cvf", "elsevier", "iclr", "ieee", "jmlr", "nature", "neurips", "openreview", "pmlr", "sage", "springer", "taylorfrancis", "usenix", "wiley"]
+DISCOVERY_SOURCES = [
+    "aaai",
+    "acl",
+    "acm",
+    "arxiv",
+    "cambridge",
+    "crossref",
+    "cvf",
+    "elsevier",
+    "frontiers",
+    "iclr",
+    "ieee",
+    "jmlr",
+    "lipics",
+    "mdpi",
+    "nature",
+    "neurips",
+    "openalex",
+    "openreview",
+    "oxford",
+    "pmlr",
+    "pnas",
+    "sage",
+    "science",
+    "semantic_scholar",
+    "springer",
+    "taylorfrancis",
+    "usenix",
+    "wiley",
+]
+OFFICIAL_BIBTEX_SOURCES = [
+    "aaai",
+    "acl",
+    "acm",
+    "arxiv",
+    "cambridge",
+    "cvf",
+    "elsevier",
+    "frontiers",
+    "iclr",
+    "ieee",
+    "jmlr",
+    "lipics",
+    "mdpi",
+    "nature",
+    "neurips",
+    "openreview",
+    "oxford",
+    "pmlr",
+    "pnas",
+    "sage",
+    "science",
+    "springer",
+    "taylorfrancis",
+    "usenix",
+    "wiley",
+]
 
 
 def load_json(path: str | Path) -> Any:
@@ -565,16 +621,21 @@ def cmd_claim_source_check(args: argparse.Namespace) -> int:
 
 
 def cmd_claim_stubs(args: argparse.Namespace) -> int:
-    tex_text = Path(args.tex).read_text(encoding="utf-8")
-    stubs = update_claim_stub_file(tex_text, args.output)
+    tex_document = load_tex_document(args.tex)
+    stubs = update_claim_stub_file_from_sources(
+        [{"source_file": source.display_path, "text": source.text} for source in tex_document.sources],
+        args.output,
+    )
     write_json(
         envelope(
             "claim_stubs_written",
             data={
                 "output": args.output,
+                "tex_sources": [source.display_path for source in tex_document.sources],
                 "created": len(stubs),
                 "stubs": [stub.to_row() for stub in stubs],
             },
+            warnings=[issue.to_dict() for issue in tex_document.issues],
         )
     )
     return 0
@@ -625,8 +686,9 @@ def cmd_audit(args: argparse.Namespace) -> int:
     lockfile = load_lockfile(args.lock)
     issues = audit_bibliography(bib_text, lockfile, submission=args.submission)
     if args.tex:
-        tex_text = Path(args.tex).read_text(encoding="utf-8")
-        issues.extend(audit_tex_bib_consistency(tex_text, bib_text, submission=args.submission))
+        tex_document = load_tex_document(args.tex, submission=args.submission)
+        issues.extend(tex_document.issues)
+        issues.extend(audit_tex_bib_consistency(tex_document.combined_text, bib_text, submission=args.submission))
     if args.claims:
         issues.extend(audit_claims_table(args.claims, submission=args.submission))
     elif args.submission:

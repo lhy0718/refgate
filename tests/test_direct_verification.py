@@ -1193,6 +1193,50 @@ def test_claim_source_check_groups_default_issue_summary(tmp_path, capsys):
     assert missing[0]["count"] == 2
 
 
+def test_claim_source_check_prefers_body_passage_over_title_like_match(tmp_path, capsys):
+    claims = tmp_path / "claims.tsv"
+    source = tmp_path / "source.txt"
+    source_map = tmp_path / "source_map.tsv"
+    output = tmp_path / "claims.review.tsv"
+    claims.write_text(
+        "claim_id\tmanuscript_location\tclaim_text\tcitation_key\tsource_location\tquote_or_evidence\tstatus\tnotes\n"
+        "c1\tsec1\tGraph agents enforce access control policies.\tsmith2026\t\t\tclaim_unchecked\t\n",
+        encoding="utf-8",
+    )
+    source.write_text(
+        "[page 1]\n"
+        "Graph Agents Enforce Access Control Policies\n\n"
+        "[page 2]\n"
+        "In the evaluation section, graph agents enforce access control policies with runtime checks and audit logs. "
+        "This body passage provides context beyond a title-like line.\n",
+        encoding="utf-8",
+    )
+    source_map.write_text(
+        "citation_key\tsource_text\tsource_label\tevidence_kind\n"
+        f"smith2026\t{source.name}\t{source.name}\tsource_text\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "claim-source-check",
+            "--claims",
+            str(claims),
+            "--source-map",
+            str(source_map),
+            "--output",
+            str(output),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    rows = list(csv.DictReader(output.open(newline="", encoding="utf-8"), delimiter="\t"))
+    assert exit_code == 0
+    assert payload["data"]["suggestions"][0]["title_like"] is False
+    assert "page 2" in rows[0]["source_location"]
+
+
 def test_claim_source_check_reports_missing_source_map_as_json(tmp_path, capsys):
     claims = tmp_path / "claims.tsv"
     claims.write_text((FIXTURES / "claims_unchecked.tsv").read_text(encoding="utf-8"), encoding="utf-8")

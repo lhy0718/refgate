@@ -158,6 +158,13 @@ Current fixture-backed adapter coverage:
 - Elsevier
 - USENIX
 - AAAI
+- Oxford Academic
+- Cambridge Core
+- PNAS
+- Science
+- Frontiers
+- MDPI
+- LIPIcs
 - OpenReview-style official pages
 
 The generic official venue adapters are URL-backed authority adapters. They
@@ -165,8 +172,9 @@ discover records from preferred venue URLs such as `dl.acm.org`,
 `ieeexplore.ieee.org`, `link.springer.com`, `sciencedirect.com`,
 `usenix.org`, `aaai.org`, `proceedings.mlr.press`,
 `openaccess.thecvf.com`, `jmlr.org`, `nature.com`,
-`onlinelibrary.wiley.com`, `journals.sagepub.com`, `tandfonline.com`, and
-`openreview.net`.
+`onlinelibrary.wiley.com`, `journals.sagepub.com`, `tandfonline.com`,
+`academic.oup.com`, `cambridge.org`, `pnas.org`, `science.org`,
+`frontiersin.org`, `mdpi.com`, `drops.dagstuhl.de`, and `openreview.net`.
 They can verify an official record without an official BibTeX endpoint; in that
 case manual fallback provenance remains manual and must not be labeled as an
 official export. Sources such as PMLR may expose publisher-provided BibTeX
@@ -243,6 +251,10 @@ wording that needs careful source support during submission mode.
 reviewed text/PDF files and still leaves claims in human-review status. For
 extractable PDFs, source locations preserve page labels when the text extractor
 provides them.
+Evidence ranking is deterministic and demotes title-like or abstract-like
+matches when a fuller body passage has comparable lexical support. Suggestions
+include overlap, coverage, matched/missing terms, page-aware location, and
+evidence-quality hints for agent review.
 `check-source-titles` compares the lockfile/BibTeX title with first-page title
 candidates from citation-key mapped source files. `paper-audit --source-dir`
 and `paper-audit --source-map` run the same gate and block on
@@ -296,6 +308,10 @@ that agents can pass to discovery and resolution commands.
 `paper-audit` is the high-level command for the common `.tex` + `.bib` case: it
 creates missing starter artifacts, updates claim stubs, writes resolver-assist
 work items, runs the audit, and writes the Markdown report.
+The `--tex` path is treated as a root file. `\input{...}` and `\include{...}`
+children are resolved relative to the root TeX directory with a recursion limit
+of 20; omitted `.tex` suffixes are added automatically. Missing includes warn in
+ordinary mode and block in submission mode.
 Use `--next-plan-output` to write a dry-run `next_actions` manifest directly
 from the paper audit result, so an agent can continue with `run-next` or
 `run-summary` without first saving the whole command response.
@@ -309,6 +325,9 @@ checking runs, it writes a claim review Markdown report to
 `--claim-review-output` or a default `refgate_claim_review.md`, including
 queues for evidence suggestions, missing source files, and mapped sources with
 no matching evidence block.
+The main audit report also includes a compact `Claim Source Check` section so
+agents can see claim/source blockers without opening the auxiliary claim review
+report first.
 By default its JSON response keeps resolver work items and issue lists compact:
 it reports counts, samples, and output artifact paths. Use
 `--include-work-items` when an agent needs inline resolver work items instead of

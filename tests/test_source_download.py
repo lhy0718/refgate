@@ -180,6 +180,26 @@ def test_source_download_derives_generic_official_html_pdf_urls():
             "https://link.springer.com/chapter/10.1007/978-3-319-46493-0_38",
             "https://link.springer.com/content/pdf/10.1007/978-3-319-46493-0_38.pdf",
         ),
+        (
+            "pnas",
+            "https://www.pnas.org/doi/abs/10.1073/pnas.260000001",
+            "https://www.pnas.org/doi/pdf/10.1073/pnas.260000001",
+        ),
+        (
+            "science",
+            "https://www.science.org/doi/full/10.1126/science.refgate001",
+            "https://www.science.org/doi/pdf/10.1126/science.refgate001",
+        ),
+        (
+            "frontiers",
+            "https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2026.00001/full",
+            "https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2026.00001/pdf",
+        ),
+        (
+            "mdpi",
+            "https://www.mdpi.com/2076-0000/26/1/1",
+            "https://www.mdpi.com/2076-0000/26/1/1/pdf",
+        ),
     ]
 
     for source_name, record_url, expected_pdf_url in cases:
@@ -197,5 +217,31 @@ def test_source_download_derives_generic_official_html_pdf_urls():
         url, source, reason = source_pdf_url_for_entry(entry)
 
         assert url == expected_pdf_url
+        assert source == source_name
+        assert reason is None
+
+
+def test_source_download_labels_new_direct_pdf_sources():
+    cases = [
+        ("oxford", "https://academic.oup.com/refgate/article-pdf/1/1/1/9999999/refgate001.pdf"),
+        ("cambridge", "https://www.cambridge.org/core/services/aop-cambridge-core/content/view/fixture.pdf"),
+        ("lipics", "https://drops.dagstuhl.de/storage/00lipics/refgate/refgate001.pdf"),
+    ]
+
+    for source_name, record_url in cases:
+        entry = LockEntry(
+            citation_key=f"{source_name}paper",
+            short_title="Fixture",
+            status="verified_manual_fallback",
+            record={"title": "Fixture Paper", "url": record_url},
+            authority={"source": source_name, "record_url": record_url},
+            bibtex={"source_kind": "publisher_metadata_manual_normalized"},
+            resolver={},
+            checked_at="2026-05-25",
+        )
+
+        url, source, reason = source_pdf_url_for_entry(entry)
+
+        assert url == record_url
         assert source == source_name
         assert reason is None

@@ -6,10 +6,11 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .claim_audit import _row_citation_keys, _text_blocks, evidence_match_score, read_claim_rows, write_claim_rows
+from .claim_audit import _evidence_quality, _row_citation_keys, _text_blocks, evidence_match_score, read_claim_rows, write_claim_rows
 from .evidence_policy import is_weak_evidence_kind, normalize_evidence_kind
 from .lockfile import load_lockfile
 from .source_text import read_source_text
+from .tex import load_tex_document
 
 
 BUNDLE_SCHEMA_VERSION = "refgate.codex_review_bundle.v1"
@@ -117,9 +118,19 @@ def _evidence_candidates_for_text(
                 "coverage": score["coverage"],
                 "matched_terms": score["matched_terms"],
                 "missing_terms": score["missing_terms"],
+                **_evidence_quality(block_label, block_text),
             }
         )
-    candidates.sort(key=lambda item: (item["overlap_score"], item["coverage"], len(item["quote_or_evidence"])), reverse=True)
+    candidates.sort(
+        key=lambda item: (
+            item["overlap_score"],
+            item["coverage"],
+            item["evidence_quality"],
+            item["word_count"],
+            len(item["quote_or_evidence"]),
+        ),
+        reverse=True,
+    )
     return candidates[:max_candidates]
 
 
@@ -159,9 +170,13 @@ def _evidence_candidate_for_source(
             "overlap_score": match["overlap_score"],
             "coverage": match["coverage"],
             "matched_terms": match["matched_terms"],
-            "missing_terms": match["missing_terms"],
-        }
-        for match in matches
+                "missing_terms": match["missing_terms"],
+                "section_heading": match.get("section_heading"),
+                "evidence_quality": match.get("evidence_quality"),
+                "title_like": match.get("title_like"),
+                "abstract_like": match.get("abstract_like"),
+            }
+            for match in matches
     ]
     candidate.update(
         {
@@ -190,6 +205,7 @@ def build_codex_review_bundle(
     max_candidates_per_source: int = 5,
 ) -> dict[str, Any]:
     output_base = Path(output).parent if output else Path.cwd()
+    tex_document = load_tex_document(tex)
     claim_rows = read_claim_rows(claims)
     references = _reference_summaries(lock)
     source_rows = _source_rows_by_key(source_map) if source_map else {}
@@ -213,6 +229,7 @@ def build_codex_review_bundle(
             {
                 "claim_id": row.get("claim_id", ""),
                 "manuscript_location": row.get("manuscript_location", ""),
+                "source_file": row.get("source_file", ""),
                 "claim_text": row.get("claim_text", ""),
                 "citation_key": row.get("citation_key", ""),
                 "citation_keys": citation_keys,
@@ -242,6 +259,8 @@ def build_codex_review_bundle(
         "schema_version": BUNDLE_SCHEMA_VERSION,
         "inputs": {
             "tex": str(tex),
+            "tex_sources": [source.display_path for source in tex_document.sources],
+            "tex_warnings": [issue.to_dict() for issue in tex_document.issues],
             "bib": str(bib),
             "lock": str(lock),
             "claims": str(claims),
@@ -278,6 +297,7 @@ def render_codex_review_bundle_markdown(bundle: dict[str, Any]) -> str:
         "- Allowed decisions: `supported`, `checked`, `needs_review`, `too_strong`, `wrong_source`, `no_evidence`, `delete_or_rewrite`, `unsupported`.",
         "- Include `source_location`, `quote_or_evidence`, and `evidence_kind` when evidence supports the claim.",
         "- Use `suggested_rewrite` instead of editing the manuscript directly.",
+        "- Prefer full-source body passages over title, abstract, or metadata-like snippets.",
         "",
         "Example:",
         "",
@@ -294,6 +314,7 @@ def render_codex_review_bundle_markdown(bundle: dict[str, Any]) -> str:
                 f"### {claim.get('claim_id', '')} — `{claim.get('citation_key', '')}`",
                 "",
                 f"- Location: {claim.get('manuscript_location', '')}",
+                f"- Source file: {claim.get('source_file', '') or '(unknown)'}",
                 f"- Current status: `{claim.get('current_status', '')}`",
                 f"- Importance: `{claim.get('importance', '')}`",
                 "",
@@ -317,10 +338,38 @@ def render_codex_review_bundle_markdown(bundle: dict[str, Any]) -> str:
             found = "found" if candidate.get("candidate_found") else "not_found"
             lines.append(f"- `{found}` {location}")
             if candidate.get("quote_or_evidence"):
+                quality_bits = [
+                    f"overlap={candidate.get('overlap_score')}",
+                    f"coverage={candidate.get('coverage')}",
+                    f"quality={candidate.get('evidence_quality')}",
+                ]
+                if candidate.get("section_heading"):
+                    quality_bits.append(f"section={candidate.get('section_heading')}")
+                if candidate.get("title_like"):
+                    quality_bits.append("title_like=true")
+                if candidate.get("abstract_like"):
+                    quality_bits.append("abstract_like=true")
+                lines.append(f"  - Evidence metadata: {', '.join(quality_bits)}")
                 lines.append(f"  - Quote: {candidate.get('quote_or_evidence')}")
             for index, evidence_candidate in enumerate(candidate.get("evidence_candidates", [])[1:], start=2):
                 lines.append(f"  - Alternative {index}: {evidence_candidate.get('source_location', '')}")
+                lines.append(
+                    "    - Evidence metadata: "
+                    f"overlap={evidence_candidate.get('overlap_score')}, "
+                    f"coverage={evidence_candidate.get('coverage')}, "
+                    f"quality={evidence_candidate.get('evidence_quality')}"
+                )
                 lines.append(f"    - Quote: {evidence_candidate.get('quote_or_evidence', '')}")
+        lines.extend(
+            [
+                "",
+                "Review decision guide:",
+                "",
+                "- Use `supported` only when a full-source passage directly supports the claim.",
+                "- Use `too_strong` when the cited source supports a narrower rewrite.",
+                "- Use `needs_review` for weak, title-only, abstract-only, or truncated evidence.",
+            ]
+        )
         lines.extend(["", "Review result template:", "", "```json"])
         lines.append(json.dumps(claim.get("review_result_template", {}), ensure_ascii=False, sort_keys=True))
         lines.extend(["```", ""])

@@ -151,6 +151,48 @@ class SpringerAdapter(OfficialHtmlAdapter):
     url_domains = ("link.springer.com",)
 
 
+class OxfordAdapter(OfficialHtmlAdapter):
+    name = "oxford"
+    venue_label = "Oxford Academic"
+    url_domains = ("academic.oup.com",)
+
+
+class CambridgeAdapter(OfficialHtmlAdapter):
+    name = "cambridge"
+    venue_label = "Cambridge Core"
+    url_domains = ("cambridge.org",)
+
+
+class PnasAdapter(OfficialHtmlAdapter):
+    name = "pnas"
+    venue_label = "PNAS"
+    url_domains = ("pnas.org",)
+
+
+class ScienceAdapter(OfficialHtmlAdapter):
+    name = "science"
+    venue_label = "Science"
+    url_domains = ("science.org",)
+
+
+class FrontiersAdapter(OfficialHtmlAdapter):
+    name = "frontiers"
+    venue_label = "Frontiers"
+    url_domains = ("frontiersin.org",)
+
+
+class MdpiAdapter(OfficialHtmlAdapter):
+    name = "mdpi"
+    venue_label = "MDPI"
+    url_domains = ("mdpi.com",)
+
+
+class LipicsAdapter(OfficialHtmlAdapter):
+    name = "lipics"
+    venue_label = "LIPIcs"
+    url_domains = ("drops.dagstuhl.de",)
+
+
 class ElsevierAdapter(OfficialHtmlAdapter):
     name = "elsevier"
     venue_label = "Elsevier"
@@ -296,14 +338,21 @@ def _acm_bibtex_url(doi: str) -> str:
 ADAPTERS: dict[str, type[OfficialHtmlAdapter]] = {
     "aaai": AaaiAdapter,
     "acm": AcmAdapter,
+    "cambridge": CambridgeAdapter,
     "cvf": CvfAdapter,
     "elsevier": ElsevierAdapter,
+    "frontiers": FrontiersAdapter,
     "ieee": IeeeAdapter,
     "jmlr": JmlrAdapter,
+    "lipics": LipicsAdapter,
+    "mdpi": MdpiAdapter,
     "nature": NatureAdapter,
     "openreview": OpenReviewAdapter,
+    "oxford": OxfordAdapter,
     "pmlr": PmlrAdapter,
+    "pnas": PnasAdapter,
     "sage": SageAdapter,
+    "science": ScienceAdapter,
     "springer": SpringerAdapter,
     "taylorfrancis": TaylorFrancisAdapter,
     "usenix": UsenixAdapter,

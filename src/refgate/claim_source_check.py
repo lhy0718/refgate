@@ -115,17 +115,30 @@ def run_claim_source_check(
                 continue
             candidate = {**match, "source_label": source["source_label"], "evidence_kind": source["evidence_kind"]}
             if rerank == "semantic-lite":
-                candidate_rank = (candidate["semantic_lite_score"], candidate["overlap_score"], candidate["coverage"])
+                candidate_rank = (
+                    (candidate["semantic_lite_score"] or 0.0) + candidate.get("evidence_quality", 0.0),
+                    candidate["overlap_score"],
+                    candidate["coverage"],
+                    candidate.get("word_count", 0),
+                )
                 best_rank = (
-                    best.get("semantic_lite_score", 0.0) if best else 0.0,
+                    ((best.get("semantic_lite_score", 0.0) or 0.0) + best.get("evidence_quality", 0.0)) if best else 0.0,
                     best.get("overlap_score", 0) if best else 0,
                     best.get("coverage", 0.0) if best else 0.0,
+                    best.get("word_count", 0) if best else 0,
                 )
             else:
-                candidate_rank = (candidate["overlap_score"], candidate["coverage"])
+                candidate_rank = (
+                    candidate["overlap_score"],
+                    candidate["coverage"],
+                    candidate.get("evidence_quality", 0.0),
+                    candidate.get("word_count", 0),
+                )
                 best_rank = (
                     best.get("overlap_score", 0) if best else 0,
                     best.get("coverage", 0.0) if best else 0.0,
+                    best.get("evidence_quality", 0.0) if best else 0.0,
+                    best.get("word_count", 0) if best else 0,
                 )
             if best is None or candidate_rank > best_rank:
                 best = candidate
@@ -169,6 +182,10 @@ def run_claim_source_check(
                 "matched_terms": best["matched_terms"],
                 "missing_terms": best["missing_terms"],
                 "semantic_lite_score": best["semantic_lite_score"],
+                "section_heading": best.get("section_heading"),
+                "evidence_quality": best.get("evidence_quality"),
+                "title_like": best.get("title_like"),
+                "abstract_like": best.get("abstract_like"),
             }
         )
 

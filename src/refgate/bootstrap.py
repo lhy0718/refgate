@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from .bibtex import parse_bibtex_entry, parse_bibtex_file, sha256_text, split_bibtex_entries
-from .claim_audit import update_claim_stub_file
+from .claim_audit import update_claim_stub_file_from_sources
 from .models import LockEntry, Lockfile
+from .tex import load_tex_document
 
 
 def _authors(value: str) -> list[str]:
@@ -123,10 +124,15 @@ def bootstrap_paper(
     project: str | None = None,
 ) -> dict[str, Any]:
     lock_result = bootstrap_lock_from_bib(bib_path, lock_output, project=project)
-    tex_text = Path(tex_path).read_text(encoding="utf-8")
-    stubs = update_claim_stub_file(tex_text, claims_output)
+    tex_document = load_tex_document(tex_path)
+    stubs = update_claim_stub_file_from_sources(
+        [{"source_file": source.display_path, "text": source.text} for source in tex_document.sources],
+        claims_output,
+    )
     return {
         "tex": str(tex_path),
+        "tex_sources": [source.display_path for source in tex_document.sources],
+        "tex_warnings": [issue.to_dict() for issue in tex_document.issues],
         "bib": str(bib_path),
         "lock": lock_result,
         "claims": {

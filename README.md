@@ -59,9 +59,10 @@ instructions that call the CLI.
   discovery
 - Fixture-backed generic official venue adapters for PMLR, ACM, CVF Open
   Access, JMLR, Nature Portfolio, Wiley, SAGE, Taylor & Francis, IEEE,
-  Springer, Elsevier, USENIX, AAAI, and OpenReview-style records, including URL-backed
-  discovery from lockfile/BibTeX `url` fields when live lookup is explicitly
-  enabled
+  Springer, Elsevier, USENIX, AAAI, Oxford Academic, Cambridge Core, PNAS,
+  Science, Frontiers, MDPI, LIPIcs, and OpenReview-style records, including
+  URL-backed discovery from lockfile/BibTeX `url` fields when live lookup is
+  explicitly enabled
 - Fixture-backed arXiv adapter for exact ID lookup, exact normalized-title
   confirmation, version/accessed-date preservation, and manual normalized
   BibTeX fallback
@@ -74,6 +75,9 @@ instructions that call the CLI.
 - End-to-end `paper-audit` command for the common `.tex` + `.bib` manuscript
   repository path, including optional source text/PDF directory mapping for
   claim evidence suggestions
+- Multi-file TeX support for `\input{...}` and `\include{...}` in
+  `paper-audit`, `audit`, `claim-stubs`, and `export-review-bundle`, with
+  source-file and line hints in generated claim TSV rows
 - Expanded CSL-JSON field mapping for common BibTeX metadata
 - Generic paper repo instruction template generator
 - CI workflow for pytest and compile checks
@@ -188,6 +192,11 @@ Use `download-sources` before source mapping when the lockfile contains a
 deterministic official/arXiv/venue PDF location. Without `--live`, it only
 returns a plan and follow-up action; with `--live`, it writes citation-key named
 PDFs such as `debenedetti2024agentdojo.pdf` for later source-map review.
+For multi-file manuscripts, the `--tex` root may include other files with
+`\input{...}` or `\include{...}`. Refgate resolves those paths relative to the
+root TeX directory, adds `.tex` when omitted, and records source-file/line hints
+in generated claim rows. Missing includes block submission mode and warn in
+non-submission mode.
 
 `reference-check` and `claim-source-check` are for real manuscript verification,
 not only tool regression tests. Use `reference-check` with reviewed candidate
@@ -212,7 +221,8 @@ manual fallback; if that fetch fails, it suggests `ADD_OFFICIAL_BIBTEX_FIXTURE`
 for an offline reviewed publisher export.
 Use repeated `--citation-key` flags to limit live or write-lock work to a small
 reviewed subset. Official venue sources such as `acm`, `ieee`, `springer`,
-`elsevier`, `usenix`, `aaai`, `pmlr`, and `openreview` discover only from
+`elsevier`, `usenix`, `aaai`, `pmlr`, `oxford`, `cambridge`, `pnas`,
+`science`, `frontiers`, `mdpi`, `lipics`, and `openreview` discover only from
 record URLs already present in the lockfile query context or supplied as
 preferred venue URLs; they do not promote discovery aggregators to final
 authority records. If a publisher blocks live fetches, save the official record

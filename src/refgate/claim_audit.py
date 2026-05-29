@@ -24,6 +24,7 @@ BLOCKING_CLAIM_STATUSES = {
 CLAIM_COLUMNS = [
     "claim_id",
     "manuscript_location",
+    "source_file",
     "claim_text",
     "citation_key",
     "source_location",
@@ -88,6 +89,7 @@ class ClaimStub:
     manuscript_location: str
     claim_text: str
     citation_key: str
+    source_file: str = ""
     source_location: str = ""
     quote_or_evidence: str = ""
     status: str = "claim_unchecked"
@@ -99,6 +101,7 @@ class ClaimStub:
         return {
             "claim_id": self.claim_id,
             "manuscript_location": self.manuscript_location,
+            "source_file": self.source_file,
             "claim_text": self.claim_text,
             "citation_key": self.citation_key,
             "source_location": self.source_location,
@@ -238,10 +241,16 @@ def infer_claim_type(claim_text: str) -> str:
     return "related_work"
 
 
-def generate_claim_stubs(tex_text: str, existing_claim_keys: set[tuple[str, str]] | None = None) -> list[ClaimStub]:
+def generate_claim_stubs(
+    tex_text: str,
+    existing_claim_keys: set[tuple[str, str]] | None = None,
+    *,
+    source_file: str = "",
+    starting_counter: int = 1,
+) -> list[ClaimStub]:
     existing_claim_keys = existing_claim_keys or set()
     stubs: list[ClaimStub] = []
-    counter = 1
+    counter = starting_counter
     for line_number, sentence in _sentence_spans(tex_text):
         citation_matches = _citation_matches(sentence)
         for citation_index, citation in enumerate(citation_matches):
@@ -254,7 +263,8 @@ def generate_claim_stubs(tex_text: str, existing_claim_keys: set[tuple[str, str]
                 stubs.append(
                     ClaimStub(
                         claim_id=f"claim-{counter:04d}",
-                        manuscript_location=f"line {line_number}",
+                        manuscript_location=f"{source_file}:line {line_number}" if source_file else f"line {line_number}",
+                        source_file=source_file,
                         claim_text=claim_text,
                         citation_key=key,
                         claim_type=infer_claim_type(claim_text),
@@ -345,6 +355,57 @@ def evidence_match_score(claim_text: str, evidence_text: str) -> dict[str, Any]:
     }
 
 
+def _section_heading(block_text: str) -> str | None:
+    first_line = re.sub(r"\s+", " ", block_text.strip().splitlines()[0] if block_text.strip() else "").strip()
+    lowered = first_line.lower().rstrip(":")
+    known_headings = {
+        "abstract": "Abstract",
+        "introduction": "Introduction",
+        "related work": "Related Work",
+        "background": "Background",
+        "method": "Method",
+        "methods": "Methods",
+        "experiments": "Experiments",
+        "evaluation": "Evaluation",
+        "results": "Results",
+        "discussion": "Discussion",
+        "conclusion": "Conclusion",
+    }
+    if lowered in known_headings:
+        return known_headings[lowered]
+    if 1 <= len(first_line.split()) <= 6 and first_line.istitle() and not first_line.endswith("."):
+        return first_line
+    return None
+
+
+def _evidence_quality(block_label: str, block_text: str) -> dict[str, Any]:
+    words = re.findall(r"[A-Za-z][A-Za-z0-9_-]*", block_text)
+    word_count = len(words)
+    stripped = block_text.strip()
+    has_sentence_punctuation = bool(re.search(r"[.!?]", stripped))
+    section_heading = _section_heading(block_text)
+    title_like = word_count <= 18 and not has_sentence_punctuation
+    abstract_like = bool(section_heading and section_heading.lower() == "abstract") or stripped.lower().startswith("abstract ")
+    body_like = word_count >= 35 and has_sentence_punctuation and not abstract_like
+    quality = 0.0
+    if body_like:
+        quality += 1.0
+    if word_count >= 20:
+        quality += 0.35
+    if title_like:
+        quality -= 1.0
+    if abstract_like:
+        quality -= 0.45
+    return {
+        "section_heading": section_heading,
+        "word_count": word_count,
+        "title_like": title_like,
+        "abstract_like": abstract_like,
+        "body_like": body_like,
+        "evidence_quality": round(quality, 4),
+    }
+
+
 def _term_bigrams(terms: set[str]) -> set[tuple[str, str]]:
     ordered = sorted(terms)
     return set(zip(ordered, ordered[1:]))
@@ -367,21 +428,37 @@ def _best_evidence_match(claim_text: str, source_text: str, *, rerank: str = "le
         score = evidence_match_score(claim_text, block_text)
         if score["overlap_score"] == 0:
             continue
-        candidate = {"block_label": block_label, "quote": block_text, **score}
+        quality = _evidence_quality(block_label, block_text)
+        candidate = {"block_label": block_label, "quote": block_text, **score, **quality}
         if rerank == "semantic-lite":
             candidate["semantic_lite_score"] = _semantic_lite_score(claim_text, block_text, score)
-            candidate_rank = (candidate["semantic_lite_score"], candidate["overlap_score"], candidate["coverage"])
+            candidate_rank = (
+                candidate["semantic_lite_score"] + candidate["evidence_quality"],
+                candidate["overlap_score"],
+                candidate["coverage"],
+                candidate["word_count"],
+            )
             best_rank = (
-                best.get("semantic_lite_score", 0.0) if best else 0.0,
+                (best.get("semantic_lite_score", 0.0) or 0.0) + (best.get("evidence_quality", 0.0) if best else 0.0)
+                if best
+                else 0.0,
                 best.get("overlap_score", 0) if best else 0,
                 best.get("coverage", 0.0) if best else 0.0,
+                best.get("word_count", 0) if best else 0,
             )
         else:
             candidate["semantic_lite_score"] = None
-            candidate_rank = (candidate["overlap_score"], candidate["coverage"])
+            candidate_rank = (
+                candidate["overlap_score"],
+                candidate["coverage"],
+                candidate["evidence_quality"],
+                candidate["word_count"],
+            )
             best_rank = (
                 best.get("overlap_score", 0) if best else 0,
                 best.get("coverage", 0.0) if best else 0.0,
+                best.get("evidence_quality", 0.0) if best else 0.0,
+                best.get("word_count", 0) if best else 0,
             )
         if best is None or candidate_rank > best_rank:
             best = candidate
@@ -444,6 +521,10 @@ def suggest_claim_evidence(
                 "matched_terms": match["matched_terms"],
                 "missing_terms": match["missing_terms"],
                 "semantic_lite_score": match["semantic_lite_score"],
+                "section_heading": match.get("section_heading"),
+                "evidence_quality": match.get("evidence_quality"),
+                "title_like": match.get("title_like"),
+                "abstract_like": match.get("abstract_like"),
             }
         )
 
@@ -528,6 +609,10 @@ def suggest_claim_evidence_bundle(
                 "matched_terms": best["matched_terms"],
                 "missing_terms": best["missing_terms"],
                 "semantic_lite_score": best["semantic_lite_score"],
+                "section_heading": best.get("section_heading"),
+                "evidence_quality": best.get("evidence_quality"),
+                "title_like": best.get("title_like"),
+                "abstract_like": best.get("abstract_like"),
                 "source_label": label,
             }
         )
@@ -546,6 +631,30 @@ def update_claim_stub_file(tex_text: str, output_path: str | Path) -> list[Claim
     existing_rows = read_claim_rows(output_path)
     existing_keys = {(row.get("claim_text", ""), row.get("citation_key", "")) for row in existing_rows}
     stubs = generate_claim_stubs(tex_text, existing_keys)
+    rows = existing_rows + [stub.to_row() for stub in stubs]
+    write_claim_rows(output_path, rows)
+    return stubs
+
+
+def update_claim_stub_file_from_sources(
+    sources: list[dict[str, str]],
+    output_path: str | Path,
+) -> list[ClaimStub]:
+    existing_rows = read_claim_rows(output_path)
+    existing_keys = {(row.get("claim_text", ""), row.get("citation_key", "")) for row in existing_rows}
+    stubs: list[ClaimStub] = []
+    counter = 1
+    for source in sources:
+        created = generate_claim_stubs(
+            source.get("text", ""),
+            existing_keys,
+            source_file=source.get("source_file", ""),
+            starting_counter=counter,
+        )
+        stubs.extend(created)
+        for stub in created:
+            existing_keys.add((stub.claim_text, stub.citation_key))
+        counter += len(created)
     rows = existing_rows + [stub.to_row() for stub in stubs]
     write_claim_rows(output_path, rows)
     return stubs
@@ -577,6 +686,7 @@ def render_claim_review_report(path: str | Path) -> str:
                 "",
                 f"- Status: `{status}`",
                 f"- Location: {row.get('manuscript_location', '')}",
+                f"- Source file: {row.get('source_file', '') or '(unknown)'}",
                 f"- Type: {row.get('claim_type', '')}",
                 f"- Importance: {row.get('importance', '')}",
                 "",

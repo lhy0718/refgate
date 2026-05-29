@@ -74,6 +74,11 @@ refgate run-next --from .refgate/next_plan.json --command-field reference_check_
 refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
 ```
 
+Multi-file manuscripts are supported through `\input{...}` and
+`\include{...}` from the root TeX file. Claude Code should treat source-file
+and line hints in `refgate_claims.tsv`, `refgate_audit.md`, and
+`.refgate/codex_review_bundle.md` as the navigation surface for claim review.
+
 For CI, copy `examples/paper-repo/.github/workflows/refgate-paper-audit.yml`
 and keep `paper-audit` as the default entry point.
 
@@ -96,4 +101,6 @@ hook prints a reminder to rerun the relevant Refgate command.
 - `ok=false` is not failure noise; it is a deterministic blocker report.
 - Manual or generated BibTeX must never be marked as official export.
 - Abstracts, summaries, and metadata snippets are weak evidence only.
+- Title-like and abstract-like snippets are review hints; prefer full-source
+  body passages when writing Codex review JSONL.
 - Final claim status requires full-source evidence and review.

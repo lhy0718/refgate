@@ -15,7 +15,7 @@ from .claim_audit import (
     audit_tex_bib_consistency,
     read_claim_rows,
     render_claim_review_report,
-    update_claim_stub_file,
+    update_claim_stub_file_from_sources,
 )
 from .claim_source_check import run_claim_source_check
 from .handoff import write_handoff
@@ -23,6 +23,7 @@ from .lockfile import load_lockfile
 from .models import AuditIssue
 from .reports import render_markdown_report
 from .source_title import check_source_titles, render_source_title_check_section, source_title_next_actions
+from .tex import load_tex_document
 
 
 SUMMARY_KEY_LIMIT = 10
@@ -196,6 +197,90 @@ def render_paper_claim_review_report(
             lines.append(f"- `{issue.get('code', '')}` `{citation_key}`: {issue.get('message', '')}{suffix}")
         lines.append("")
 
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_claim_source_check_section(claim_source_check: dict[str, Any] | None) -> str:
+    if not claim_source_check:
+        return ""
+
+    lines = [
+        "",
+        "## Claim Source Check",
+        "",
+        f"- Source map: {claim_source_check.get('source_map') or '(none)'}",
+        f"- Sources: {claim_source_check.get('source_count', 0)}",
+        f"- Claims: {claim_source_check.get('claim_count', 0)}",
+        f"- Evidence suggestions: {claim_source_check.get('updated', 0)}",
+        f"- Blocking issues: {len(claim_source_check.get('blocking_issues', []))}",
+        f"- Warnings: {len(claim_source_check.get('warnings', []))}",
+        "",
+    ]
+
+    missing_source_keys = claim_source_check.get("missing_source_keys", [])
+    if missing_source_keys:
+        lines.extend(["### Missing Source Files", ""])
+        for key in missing_source_keys[:SUMMARY_KEY_LIMIT]:
+            lines.append(f"- `{key}`")
+        if len(missing_source_keys) > SUMMARY_KEY_LIMIT:
+            lines.append(f"- ... {len(missing_source_keys) - SUMMARY_KEY_LIMIT} more")
+        lines.append("")
+
+    no_match_claims = claim_source_check.get("no_match_claims", [])
+    if no_match_claims:
+        lines.extend(["### No Evidence Match In Mapped Source", ""])
+        for item in no_match_claims[:SUMMARY_KEY_LIMIT]:
+            lines.append(f"- `{item.get('claim_id', '')}` / `{item.get('citation_key', '')}`")
+        if len(no_match_claims) > SUMMARY_KEY_LIMIT:
+            lines.append(f"- ... {len(no_match_claims) - SUMMARY_KEY_LIMIT} more")
+        lines.append("")
+
+    suggestions = claim_source_check.get("suggestions", [])
+    if suggestions:
+        lines.extend(["### Evidence Suggestions Awaiting Review", ""])
+        for item in suggestions[:SUMMARY_KEY_LIMIT]:
+            location = item.get("source_location", "")
+            score = item.get("overlap_score", 0)
+            coverage = item.get("coverage", 0)
+            lines.append(
+                f"- `{item.get('claim_id', '')}` / `{item.get('citation_key', '')}`: "
+                f"{location} (overlap {score}, coverage {coverage})"
+            )
+        if len(suggestions) > SUMMARY_KEY_LIMIT:
+            lines.append(f"- ... {len(suggestions) - SUMMARY_KEY_LIMIT} more")
+        lines.append("")
+
+    blocking_issues = claim_source_check.get("blocking_issues", [])
+    if blocking_issues:
+        lines.extend(["### Blocking Issues", ""])
+        for issue in blocking_issues[:SUMMARY_KEY_LIMIT]:
+            citation_key = issue.get("citation_key") or ""
+            evidence = ", ".join(str(item) for item in issue.get("evidence", []))
+            evidence_text = f" [{evidence}]" if evidence else ""
+            key_text = f" `{citation_key}`" if citation_key else ""
+            lines.append(f"- `{issue.get('code', '')}`{key_text}: {issue.get('message', '')}{evidence_text}")
+        if len(blocking_issues) > SUMMARY_KEY_LIMIT:
+            lines.append(f"- ... {len(blocking_issues) - SUMMARY_KEY_LIMIT} more")
+        lines.append("")
+
+    warnings = claim_source_check.get("warnings", [])
+    if warnings:
+        lines.extend(["### Warnings", ""])
+        for issue in warnings[:SUMMARY_KEY_LIMIT]:
+            citation_key = issue.get("citation_key") or ""
+            key_text = f" `{citation_key}`" if citation_key else ""
+            lines.append(f"- `{issue.get('code', '')}`{key_text}: {issue.get('message', '')}")
+        if len(warnings) > SUMMARY_KEY_LIMIT:
+            lines.append(f"- ... {len(warnings) - SUMMARY_KEY_LIMIT} more")
+        lines.append("")
+
+    lines.extend(
+        [
+            "### Next Action",
+            "",
+            "- Keep mapped claims blocked until source evidence is reviewed and imported with `import-review`.",
+        ]
+    )
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -605,11 +690,16 @@ def run_paper_audit(
     lock_path = Path(lock)
     claims_path = Path(claims)
 
+    tex_document = load_tex_document(tex_path, submission=submission)
+
     created: dict[str, Any] = {}
     if not lock_path.exists() or not claims_path.exists():
         created["bootstrap"] = bootstrap_paper(tex_path, bib_path, lock_path, claims_path, project=project)
     elif update_claims:
-        stubs = update_claim_stub_file(tex_path.read_text(encoding="utf-8"), claims_path)
+        stubs = update_claim_stub_file_from_sources(
+            [{"source_file": source.display_path, "text": source.text} for source in tex_document.sources],
+            claims_path,
+        )
         created["claim_stubs_created"] = len(stubs)
     else:
         created["claim_stubs_created"] = 0
@@ -658,9 +748,10 @@ def run_paper_audit(
     }
 
     bib_text = bib_path.read_text(encoding="utf-8")
-    tex_text = tex_path.read_text(encoding="utf-8")
+    tex_text = tex_document.combined_text
     lockfile = load_lockfile(lock_path)
     issues = audit_bibliography(bib_text, lockfile, submission=submission)
+    issues.extend(tex_document.issues)
     issues.extend(audit_tex_bib_consistency(tex_text, bib_text, submission=submission))
     issues.extend(audit_claims_table(claims_path, submission=submission))
     if claim_source_check:
@@ -687,6 +778,7 @@ def run_paper_audit(
     if report:
         Path(report).parent.mkdir(parents=True, exist_ok=True)
         report_text = render_markdown_report(lockfile, issues)
+        report_text += render_claim_source_check_section(claim_source_check)
         report_text += render_source_title_check_section(source_title_check)
         Path(report).write_text(report_text, encoding="utf-8")
 
@@ -722,6 +814,7 @@ def run_paper_audit(
         "ok": not blocking,
         "tex": str(tex_path),
         "bib": str(bib_path),
+        "tex_sources": [source.display_path for source in tex_document.sources],
         "lock": str(lock_path),
         "claims": str(claims_path),
         "report": str(report) if report else None,

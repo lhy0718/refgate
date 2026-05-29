@@ -16,6 +16,9 @@ citation-bearing claims.
 Run `paper-audit` first for ordinary paper repositories. It creates missing
 starter artifacts, writes resolver work items, writes the Markdown report, and
 saves a deterministic next-action plan.
+If `paper.tex` uses `\input{...}` or `\include{...}`, Refgate resolves those
+children relative to the root TeX directory and records source-file/line hints
+in generated claim rows.
 
 ```bash
 refgate paper-audit --tex paper.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --report refgate_audit.md --resolver-output refgate_queries.json --next-plan-output .refgate/next_plan.json --submission --json
@@ -80,6 +83,8 @@ refgate audit --tex paper.tex --bib references.bib --lock refgate.lock.json --cl
 - Discovery sources are not final authorities unless Refgate marks them as such.
 - Live network checks are opt-in.
 - Abstracts, summaries, and metadata snippets are weak evidence only.
+- Prefer full-source body passages over title-like or abstract-like snippets
+  when reviewing evidence candidates.
 - Keep final claim status in the TSV; evidence suggestions require review.
 - If a Refgate command returns `ok=false`, report the blocker or keep following
   safe next actions; do not call the paper verified.

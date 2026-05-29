@@ -357,6 +357,40 @@ def _source_guidance(source: str, citation_key: str) -> dict[str, Any]:
                 "live_fetch_note": "IEEE pages often store metadata in scripts; save reviewed official HTML if live parsing is blocked.",
             }
         )
+    elif source == "pnas":
+        guidance.update(
+            {
+                "record_url_patterns": ["https://www.pnas.org/doi/abs/DOI", "https://www.pnas.org/doi/full/DOI"],
+                "source_pdf_url_pattern": "https://www.pnas.org/doi/pdf/DOI",
+            }
+        )
+    elif source == "science":
+        guidance.update(
+            {
+                "record_url_patterns": ["https://www.science.org/doi/abs/DOI", "https://www.science.org/doi/full/DOI"],
+                "source_pdf_url_pattern": "https://www.science.org/doi/pdf/DOI",
+            }
+        )
+    elif source == "frontiers":
+        guidance.update(
+            {
+                "record_url_patterns": ["https://www.frontiersin.org/journals/JOURNAL/articles/DOI/full"],
+                "source_pdf_url_pattern": "Replace the final /full path segment with /pdf.",
+            }
+        )
+    elif source == "mdpi":
+        guidance.update(
+            {
+                "record_url_patterns": ["https://www.mdpi.com/JOURNAL/VOLUME/ISSUE/ARTICLE"],
+                "source_pdf_url_pattern": "Append /pdf or replace /htm with /pdf.",
+            }
+        )
+    elif source in {"oxford", "cambridge", "lipics"}:
+        guidance.update(
+            {
+                "live_fetch_note": "Use reviewed official HTML and official BibTeX fixtures when the record page does not expose a verified BibTeX endpoint.",
+            }
+        )
     return guidance
 
 

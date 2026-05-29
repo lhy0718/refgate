@@ -135,6 +135,41 @@ def _url_from_springer_record(url: str) -> str | None:
     return f"{match.group(1)}/content/pdf/{match.group(2)}.pdf"
 
 
+def _url_from_pnas_record(url: str) -> str | None:
+    match = re.match(r"^(https://(?:www\.)?pnas\.org)/doi/(?:abs|full|pdf)/(.+?)(?:[?#].*)?$", url, flags=re.IGNORECASE)
+    if not match:
+        return url if "pnas.org" in url and url.lower().endswith(".pdf") else None
+    return f"{match.group(1)}/doi/pdf/{match.group(2)}"
+
+
+def _url_from_science_record(url: str) -> str | None:
+    match = re.match(r"^(https://www\.science\.org)/doi/(?:abs|full|pdf)/(.+?)(?:[?#].*)?$", url, flags=re.IGNORECASE)
+    if not match:
+        return url if "science.org" in url and url.lower().endswith(".pdf") else None
+    return f"{match.group(1)}/doi/pdf/{match.group(2)}"
+
+
+def _url_from_frontiers_record(url: str) -> str | None:
+    if "frontiersin.org" not in url:
+        return None
+    if url.lower().endswith("/pdf"):
+        return url
+    pdf_url = re.sub(r"/full(?:[?#].*)?$", "/pdf", url)
+    return pdf_url if pdf_url != url else None
+
+
+def _url_from_mdpi_record(url: str) -> str | None:
+    if "mdpi.com" not in url:
+        return None
+    if url.lower().endswith("/pdf") or url.lower().endswith(".pdf"):
+        return url
+    pdf_url = re.sub(r"/htm(?:[?#].*)?$", "/pdf", url)
+    if pdf_url != url:
+        return pdf_url
+    cleaned = re.sub(r"[?#].*$", "", url).rstrip("/")
+    return f"{cleaned}/pdf"
+
+
 def _source_from_pdf_url(url: str, fallback: str | None = None) -> str | None:
     lowered = url.lower()
     if "arxiv.org/" in lowered:
@@ -155,6 +190,20 @@ def _source_from_pdf_url(url: str, fallback: str | None = None) -> str | None:
         return "jmlr"
     if "link.springer.com/" in lowered:
         return "springer"
+    if "academic.oup.com/" in lowered:
+        return "oxford"
+    if "cambridge.org/" in lowered:
+        return "cambridge"
+    if "pnas.org/" in lowered:
+        return "pnas"
+    if "science.org/" in lowered:
+        return "science"
+    if "frontiersin.org/" in lowered:
+        return "frontiers"
+    if "mdpi.com/" in lowered:
+        return "mdpi"
+    if "drops.dagstuhl.de/" in lowered:
+        return "lipics"
     return fallback
 
 
@@ -202,6 +251,18 @@ def source_pdf_url_for_entry(entry: LockEntry) -> tuple[str | None, str | None, 
         springer_url = _url_from_springer_record(url)
         if springer_url:
             return springer_url, "springer", None
+        pnas_url = _url_from_pnas_record(url)
+        if pnas_url:
+            return pnas_url, "pnas", None
+        science_url = _url_from_science_record(url)
+        if science_url:
+            return science_url, "science", None
+        frontiers_url = _url_from_frontiers_record(url)
+        if frontiers_url:
+            return frontiers_url, "frontiers", None
+        mdpi_url = _url_from_mdpi_record(url)
+        if mdpi_url:
+            return mdpi_url, "mdpi", None
     arxiv_id = str(record.get("arxiv_id") or "")
     if arxiv_id:
         return _arxiv_pdf_url(arxiv_id), "arxiv", None

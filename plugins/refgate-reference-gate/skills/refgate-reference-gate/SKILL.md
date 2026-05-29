@@ -65,6 +65,9 @@ missing starter artifacts, updates claim stubs, writes resolver work items, runs
 the audit, and writes the Markdown report. The starter lockfile is intentionally
 blocking until every entry has official export provenance, verified manual
 fallback, or arXiv fallback provenance.
+If the root manuscript uses `\input{...}` or `\include{...}`, Refgate resolves
+those children relative to the root TeX directory. Use the source-file and line
+hints in generated claim rows and reports when navigating the manuscript.
 
 For reference provenance, prefer the commands embedded in the
 `RESOLVE_REFERENCE_PROVENANCE` action:
@@ -166,6 +169,11 @@ JSON object per claim to `.refgate/codex_review_result.jsonl`. Use
 claims remain `needs_review`; use `--allow-checked` only when the user has
 explicitly approved final claim status, and never mark weak abstract/metadata
 evidence as checked.
+Prefer full-source body passages over title-like, abstract-like, or
+metadata-like snippets when writing Codex review JSONL. Treat the main
+`refgate_audit.md` `Claim Source Check` section as a compact blocker index, then
+open `refgate_claim_review.md` or the Codex review bundle for the evidence
+queue.
 
 For scanned or image-only PDFs, Refgate creates a deterministic vision handoff
 plan but does not send images anywhere:
@@ -232,6 +240,8 @@ Use `next_actions` as the handoff contract. Common action kinds:
 - Discovery sources are not final authorities by default.
 - Abstracts, summaries, and metadata snippets are weak evidence only; they must
   not make a claim `checked`.
+- Title-like or abstract-like evidence candidates are review hints; prefer
+  fuller body passages for support decisions.
 - Live network checks are opt-in only.
 - Evidence suggestions may include PDF page labels, but they still require
   human review before a claim is marked checked.

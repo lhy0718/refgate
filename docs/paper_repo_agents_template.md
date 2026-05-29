@@ -33,6 +33,9 @@ python -m refgate paper-audit --tex PATH/TO/main.tex --bib PATH/TO/references.bi
 
 The generated lockfile is expected to block submission until each entry is
 resolved to official BibTeX export, verified manual fallback, or arXiv fallback.
+If `PATH/TO/main.tex` uses `\input{...}` or `\include{...}`, Refgate resolves
+those children relative to the root TeX directory and writes source-file/line
+hints into generated claim rows.
 
 Inspect the saved plan before executing anything:
 
@@ -59,6 +62,8 @@ python -m refgate run-summary --input PATH/TO/.refgate/next_plan.json --input PA
 - Default work must be network-free; live discovery is opt-in only.
 - Do not commit private manuscripts, private reference-manager exports, local
   absolute paths, private notes, or credential material.
+- Prefer full-source body passages over title-like or abstract-like snippets
+  when reviewing evidence candidates.
 
 ### Required Checks
 

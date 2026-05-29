@@ -30,6 +30,8 @@ PYTHONPATH=src python3 -m refgate --help
 - Discovery sources are not final authorities by default.
 - Abstracts, summaries, and metadata snippets are weak evidence only. They must
   not make a citation-bearing claim checked.
+- Prefer full-source body passages over title-like or abstract-like snippets
+  when writing claim review results.
 - Live network work is opt-in only.
 - If a Refgate command returns `ok=false`, continue through the listed
   `next_actions` or report the remaining blocker clearly.
@@ -41,6 +43,8 @@ PYTHONPATH=src python3 -m refgate --help
 For an ordinary paper repository with only `.tex` and `.bib`, run `paper-audit`
 first. It creates starter lock and claim files, writes resolver work items, runs
 the audit, and returns deterministic next actions.
+The root TeX file may use `\input{...}` or `\include{...}`; Refgate resolves
+those children and records source-file/line hints for claim review navigation.
 
 Use `.claude/commands/refgate/*.md` project slash commands when working in
 Claude Code. The command names are:

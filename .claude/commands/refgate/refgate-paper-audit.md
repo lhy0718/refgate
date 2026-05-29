@@ -14,6 +14,8 @@ Inputs, if supplied:
 If arguments are missing, inspect the repository and choose the most plausible
 main `.tex` and `.bib` files. Ask only if multiple choices would lead to
 conflicting edits.
+If the selected TeX file uses `\input{...}` or `\include{...}`, Refgate will
+expand those children relative to the root TeX directory.
 
 Use `refgate` if installed. If not installed and this is a Refgate source
 checkout, use `PYTHONPATH=src python3 -m refgate`.

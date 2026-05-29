@@ -348,3 +348,115 @@ def test_subscription_publisher_adapters_keep_missing_bibtex_as_manual_boundary(
         assert candidate.venue == venue
         assert candidate.bibtex_url is None
         assert endpoints == []
+
+
+def test_new_official_venue_adapters_are_fixture_backed_and_keep_export_boundary():
+    cases = [
+        (
+            "oxford",
+            "https://academic.oup.com/refgate/article/1/1/1/9999999",
+            "oxford_authority.html",
+            "Refgate Fixture: Oxford Official Record",
+            "10.1093/refgate/fixture001",
+            None,
+        ),
+        (
+            "cambridge",
+            "https://www.cambridge.org/core/journals/refgate/article/fixture",
+            "cambridge_authority.html",
+            "Refgate Fixture: Cambridge Official Record",
+            "10.1017/refgate.2026.1",
+            None,
+        ),
+        (
+            "pnas",
+            "https://www.pnas.org/doi/abs/10.1073/pnas.260000001",
+            "pnas_authority.html",
+            "Refgate Fixture: PNAS Official Record",
+            "10.1073/pnas.260000001",
+            "https://www.pnas.org/doi/bibtex/10.1073/pnas.260000001",
+        ),
+        (
+            "science",
+            "https://www.science.org/doi/abs/10.1126/science.refgate001",
+            "science_authority.html",
+            "Refgate Fixture: Science Official Record",
+            "10.1126/science.refgate001",
+            None,
+        ),
+        (
+            "frontiers",
+            "https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2026.00001/full",
+            "frontiers_authority.html",
+            "Refgate Fixture: Frontiers Official Record",
+            "10.3389/frai.2026.00001",
+            "https://www.frontiersin.org/articles/10.3389/frai.2026.00001/bibtex",
+        ),
+        (
+            "mdpi",
+            "https://www.mdpi.com/2076-0000/26/1/1",
+            "mdpi_authority.html",
+            "Refgate Fixture: MDPI Official Record",
+            "10.3390/refgate26010001",
+            "https://www.mdpi.com/2076-0000/26/1/1/bibtex",
+        ),
+        (
+            "lipics",
+            "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.Refgate.2026.1",
+            "lipics_authority.html",
+            "Refgate Fixture: LIPIcs Official Record",
+            "10.4230/LIPIcs.Refgate.2026.1",
+            "https://drops.dagstuhl.de/bibtex/10.4230/LIPIcs.Refgate.2026.1",
+        ),
+    ]
+
+    for source, url, fixture, title, doi, bibtex_url in cases:
+        html = (FIXTURES / fixture).read_text(encoding="utf-8")
+        adapter = ADAPTERS[source](fetcher=lambda _url, html=html: html)
+        candidate = adapter.discover(PaperQuery(query_id=source, title=title, preferred_venues=[url]))[0]
+        authority = adapter.fetch_authority(candidate)
+        endpoints = adapter.find_export_endpoints(authority)
+
+        assert candidate.source == source
+        assert candidate.is_official_record is True
+        assert candidate.title == title
+        assert candidate.doi == doi
+        assert candidate.bibtex_url == bibtex_url
+        if bibtex_url:
+            assert endpoints[0].is_official is True
+        else:
+            assert endpoints == []
+
+
+def test_new_official_venue_adapter_fetches_verified_endpoint_but_not_missing_exports():
+    html = (FIXTURES / "mdpi_authority.html").read_text(encoding="utf-8")
+    bib = (FIXTURES / "generic_new_venue_official.bib").read_text(encoding="utf-8")
+
+    def fetch(url: str) -> str:
+        return bib if url.endswith("/bibtex") else html
+
+    adapter = ADAPTERS["mdpi"](fetcher=fetch)
+    candidate = adapter.discover(
+        PaperQuery(
+            query_id="mdpi",
+            title="Refgate Fixture: MDPI Official Record",
+            preferred_venues=["https://www.mdpi.com/2076-0000/26/1/1"],
+        )
+    )[0]
+    authority = adapter.fetch_authority(candidate)
+    bibtex = adapter.fetch_bibtex(authority, adapter.find_export_endpoints(authority)[0])
+
+    assert bibtex.source_kind == "official_export"
+    assert bibtex.citation_key == "refgateNewVenue2026"
+
+    science_html = (FIXTURES / "science_authority.html").read_text(encoding="utf-8")
+    science = ADAPTERS["science"](fetcher=lambda _url: science_html)
+    science_candidate = science.discover(
+        PaperQuery(
+            query_id="science",
+            title="Refgate Fixture: Science Official Record",
+            preferred_venues=["https://www.science.org/doi/abs/10.1126/science.refgate001"],
+        )
+    )[0]
+    science_authority = science.fetch_authority(science_candidate)
+    assert science.find_export_endpoints(science_authority) == []

@@ -38,7 +38,8 @@ become the source of truth.
 - Semantic Scholar and OpenAlex discovery/cross-check adapters
 - Generic official-HTML venue adapters for PMLR, ACM, CVF Open Access, JMLR,
   Nature Portfolio, Wiley, SAGE, Taylor & Francis, IEEE, Springer, Elsevier,
-  USENIX, AAAI, and OpenReview-style records
+  USENIX, AAAI, Oxford Academic, Cambridge Core, PNAS, Science, Frontiers,
+  MDPI, LIPIcs, and OpenReview-style records
 - Source-specific ACL Anthology, ICLR, and NeurIPS adapters with official
   BibTeX endpoint handling
 - Targeted `reference-check --citation-key` reruns for reviewed subsets
@@ -73,6 +74,11 @@ become the source of truth.
 - Venue labeling for direct public PDF URLs in source download plans
 - Wrapped-title continuation handling for source-title checks on real PDFs
 - Source-title mismatch next-actions and audit report section
+- Claim-source check summary in `paper-audit` Markdown reports
+- Multi-file TeX include resolution for `paper-audit`, `audit`, `claim-stubs`,
+  and `export-review-bundle`
+- Deterministic evidence quality ranking that demotes title-like and
+  abstract-like snippets behind fuller body passages
 - Persistent claim-evidence review next-actions while mapped claims remain in
   review status
 - Standalone handoff export in Refgate JSON and CSL-JSON formats

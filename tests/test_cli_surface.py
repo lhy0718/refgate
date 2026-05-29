@@ -437,6 +437,10 @@ def test_cli_paper_audit_can_build_source_map_from_citation_key_files(tmp_path, 
     assert "sources/debenedetti2024agentdojo.txt" in source_map_text
     assert str(tmp_path) not in source_map_text
     assert "## Source-Check Summary" in claim_review.read_text(encoding="utf-8")
+    report_text = report.read_text(encoding="utf-8")
+    assert "## Claim Source Check" in report_text
+    assert "Evidence Suggestions Awaiting Review" in report_text
+    assert "claim-0001" in report_text
 
     second_exit = main(
         [
@@ -525,6 +529,10 @@ def test_cli_paper_audit_claim_review_summarizes_no_match_sources(tmp_path, caps
     assert no_match_action["writes_files"] is False
     assert "No Evidence Match In Mapped Source" in review
     assert "CLAIM_EVIDENCE_NOT_FOUND_IN_SOURCE" in review
+    report_text = report.read_text(encoding="utf-8")
+    assert "## Claim Source Check" in report_text
+    assert "No Evidence Match In Mapped Source" in report_text
+    assert "CLAIM_EVIDENCE_NOT_FOUND_IN_SOURCE" in report_text
 
 
 def test_cli_run_next_plans_actions_without_execution(tmp_path, capsys):

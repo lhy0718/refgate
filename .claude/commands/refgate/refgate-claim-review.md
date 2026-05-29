@@ -16,6 +16,8 @@ Inputs:
 Use citation-key named source files such as `smith2026.pdf` or `smith2026.txt`.
 Do not use abstracts, summaries, titles, or metadata snippets as final evidence
 for checked claims.
+Prefer full-source body passages over title-like or abstract-like candidates
+when writing the review JSONL.
 
 Use `refgate` if installed. If not installed and this is a Refgate source
 checkout, use `PYTHONPATH=src python3 -m refgate`.

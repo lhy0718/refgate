@@ -35,6 +35,10 @@ saves a deterministic next-action plan:
 {command} paper-audit --tex {tex} --bib {bib} --lock {lock} --claims {claims} --report {report} --resolver-output refgate_queries.json --next-plan-output .refgate/next_plan.json --submission --json
 ```
 
+If `{tex}` uses `\\input{{...}}` or `\\include{{...}}`, Refgate resolves those
+children relative to the root TeX directory and records source-file/line hints
+in generated claim rows.
+
 Inspect the plan without executing it:
 
 ```bash
@@ -130,6 +134,8 @@ jobs:
 - Discovery sources are not final authorities unless Refgate marks them as such.
 - Live network checks are opt-in.
 - Abstracts, summaries, and metadata snippets are weak evidence only.
+- Prefer full-source body passages over title-like or abstract-like snippets
+  when reviewing Codex bundle candidates.
 - Keep final claim status in the TSV; evidence suggestions require human review.
 - If a Refgate command returns `ok=false`, report the blocker or keep following
   safe next actions; do not call the paper verified.

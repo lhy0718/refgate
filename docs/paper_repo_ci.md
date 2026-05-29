@@ -4,6 +4,9 @@ Use `paper-audit` as the default Refgate entry point in manuscript
 repositories. It works for the common starting point where a paper has only a
 TeX file and a BibTeX file, then creates the starter lockfile, claim TSV,
 resolver work items, audit report, and next-action manifest.
+The TeX path is a root file; `\input{...}` and `\include{...}` children are
+resolved relative to that root, so CI does not need separate arguments for each
+included section.
 
 ## Minimal GitHub Actions Example
 
