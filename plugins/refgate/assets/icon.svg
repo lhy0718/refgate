@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
-  <title id="title">Refgate Reference Gate Icon</title>
+  <title id="title">refgate Icon</title>
   <desc id="desc">A document, checkmark, and gate mark for reference verification.</desc>
   <rect width="256" height="256" rx="48" fill="#0f172a"/>
   <path d="M78 54h72l34 34v114H78z" fill="#f8fafc"/>

@@ -1,11 +1,11 @@
 ---
-name: refgate-reference-gate
+name: refgate
 description: Use when working on academic manuscripts, bibliographies, BibTeX, citation claims, source evidence, source PDFs, or reference verification with the Refgate CLI.
 metadata:
   short-description: Gate manuscript references with Refgate
 ---
 
-# Refgate Reference Gate
+# refgate
 
 Use this skill when a task touches academic manuscript references, BibTeX,
 citation keys, citation-bearing claims, source evidence, or reference handoff

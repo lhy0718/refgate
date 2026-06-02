@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "refgate-reference-gate",
+      "name": "refgate",
       "source": {
         "source": "local",
-        "path": "./plugins/refgate-reference-gate"
+        "path": "./plugins/refgate"
       },
       "policy": {
         "installation": "AVAILABLE",

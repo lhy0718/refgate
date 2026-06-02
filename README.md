@@ -359,8 +359,8 @@ manifest procedure.
 
 Refgate is designed to be called by agents through project instructions or a
 Codex Skill, while the CLI and audit artifacts remain the source of truth.
-This repository also includes a local-alpha Codex plugin package at
-`plugins/refgate-reference-gate`. The plugin packages the Refgate skill,
+This repository also includes a local-alpha Codex plugin package named
+`refgate` at `plugins/refgate`. The plugin packages the Refgate skill,
 manifest metadata, icon, and CLI preview asset; it does not replace the CLI or
 add a server layer.
 

@@ -4,7 +4,7 @@ Copy this section into a manuscript repository's `AGENTS.md`, then replace the
 placeholder paths with that repository's actual files.
 
 ```markdown
-## Refgate Reference Gate
+## refgate
 
 Use Refgate before adding, editing, or finalizing references, BibTeX entries,
 citation-bearing claims, or reference handoff artifacts.

@@ -81,7 +81,7 @@ Do not store long-lived package-index credentials in this repository.
 Codex plugin distribution and Claude Code command packs are release-adjacent,
 not replacements for the CLI. Before announcing them:
 
-- ensure `plugins/refgate-reference-gate/.codex-plugin/plugin.json` version
+- ensure `plugins/refgate/.codex-plugin/plugin.json` version
   matches `pyproject.toml`;
 - run `python -m pytest tests/test_plugin_packaging.py -q`;
 - check `docs/codex_plugin_distribution.md`;

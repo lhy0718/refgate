@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PLUGIN_ROOT = ROOT / "plugins" / "refgate-reference-gate"
+PLUGIN_ROOT = ROOT / "plugins" / "refgate"
 
 
 def test_codex_plugin_manifest_and_marketplace_are_wired():
@@ -14,14 +14,14 @@ def test_codex_plugin_manifest_and_marketplace_are_wired():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
 
-    assert manifest["name"] == "refgate-reference-gate"
+    assert manifest["name"] == "refgate"
     assert manifest["skills"] == "./skills/"
-    assert manifest["interface"]["displayName"] == "Refgate Reference Gate"
+    assert manifest["interface"]["displayName"] == "refgate"
     assert manifest["interface"]["category"] == "Research"
     assert "Local CLI workflow" in manifest["interface"]["capabilities"]
     assert len(manifest["interface"]["defaultPrompt"]) >= 3
     assert marketplace["plugins"][0]["name"] == manifest["name"]
-    assert marketplace["plugins"][0]["source"]["path"] == "./plugins/refgate-reference-gate"
+    assert marketplace["plugins"][0]["source"]["path"] == "./plugins/refgate"
     assert marketplace["plugins"][0]["policy"]["installation"] == "AVAILABLE"
     assert marketplace["plugins"][0]["policy"]["authentication"] == "ON_INSTALL"
     assert (assets_path / "icon.svg").exists()
@@ -29,7 +29,7 @@ def test_codex_plugin_manifest_and_marketplace_are_wired():
 
 
 def test_codex_plugin_skill_is_public_and_cli_first():
-    skill_path = PLUGIN_ROOT / "skills" / "refgate-reference-gate" / "SKILL.md"
+    skill_path = PLUGIN_ROOT / "skills" / "refgate" / "SKILL.md"
     text = skill_path.read_text(encoding="utf-8")
 
     forbidden_terms = [

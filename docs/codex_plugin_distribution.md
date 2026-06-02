@@ -3,7 +3,7 @@
 Refgate can be packaged as a Codex plugin because the official plugin structure
 uses a `.codex-plugin/plugin.json` manifest plus optional `skills/`, hooks,
 apps, MCP config, and assets. This repository includes a repo-local plugin at
-`plugins/refgate-reference-gate` and a repo-local marketplace catalog at
+`plugins/refgate` and a repo-local marketplace catalog at
 `.agents/plugins/marketplace.json`.
 
 The plugin is an agent UX package, not the verification engine. It teaches
@@ -58,7 +58,7 @@ stay reproducible from shell, CI, and agent sessions.
    .agents/plugins/marketplace.json
    ```
 
-5. Install `Refgate Reference Gate` from the `Refgate Local` catalog.
+5. Install `refgate` from the `Refgate Local` catalog.
 6. Ask Codex to bootstrap or audit a manuscript with ordinary `.tex` and `.bib`
    files. The skill should start with `paper-audit`, inspect `next_actions`,
    and keep `ok=false` blockers visible instead of treating them as success.
@@ -71,7 +71,7 @@ Before sharing beyond local testing:
 - add a stable version and release tag;
 - ensure the released CLI version and plugin manifest version match;
 - review the included icon and CLI screenshot under
-  `plugins/refgate-reference-gate/assets/`;
+  `plugins/refgate/assets/`;
 - keep the plugin skill free of local absolute paths;
 - keep private manuscripts, downloaded PDFs, reviewed live caches, and local
   agent artifacts out of the plugin package;
