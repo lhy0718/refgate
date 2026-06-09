@@ -6,6 +6,13 @@
 - Blocking issues: 0
 - Warnings: 1
 
+## Phase Status
+
+- bibliography: passed (0 blocking, 1 warnings)
+- manuscript: passed (0 blocking, 0 warnings)
+- source-title: passed (0 blocking, 0 warnings)
+- claim review: passed (0 blocking, 0 warnings)
+
 ## Blocking Issues
 
 - None

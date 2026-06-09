@@ -85,6 +85,13 @@ def test_source_title_candidates_match_title_with_arxiv_header_and_subtitle_wrap
     )
 
 
+def test_source_title_matches_tex_tau_unicode_and_pdf_spacing():
+    assert source_title_matches(
+        "{$\\tau$-bench}: A Benchmark for Tool-Agent-User Interaction in Real-World Domains",
+        ["τ -bench: A Benchmark for T ool-Agent-User"],
+    )
+
+
 def test_source_title_check_blocks_when_title_is_not_on_first_page(tmp_path, capsys):
     lock = tmp_path / "refgate.lock.json"
     source = tmp_path / "debenedetti2024agentdojo.txt"
@@ -203,6 +210,66 @@ def test_check_source_titles_accepts_reviewed_official_metadata_mismatch(tmp_pat
     assert payload["data"]["results"][0]["reviewed_mismatch"] is True
     assert payload["warnings"][0]["code"] == "SOURCE_TITLE_MISMATCH_REVIEWED"
     assert payload["next_actions"] == []
+
+
+def test_check_source_titles_accepts_review_source_text_from_cwd_relative_path(tmp_path, monkeypatch, capsys):
+    paper_dir = tmp_path / "paper"
+    source_dir = paper_dir / ".refgate" / "sources"
+    source_dir.mkdir(parents=True)
+    lock = paper_dir / "refgate.lock.json"
+    source = source_dir / "debenedetti2024agentdojo.txt"
+    source_map = paper_dir / ".refgate" / "source_map.tsv"
+    title_review = paper_dir / ".refgate" / "source_title_review.jsonl"
+    expected_title = "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents"
+    observed_title = "A Reviewed Metadata Cover Page"
+    lock.write_text((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8"), encoding="utf-8")
+    source.write_text(
+        "[page 1]\n"
+        f"{observed_title}\n"
+        "Ada Example\n\n"
+        "Abstract\n"
+        "Refgate verifies references with source evidence before bibliography approval.\n",
+        encoding="utf-8",
+    )
+    source_map.write_text(
+        "citation_key\tsource_text\tsource_label\tevidence_kind\n"
+        "debenedetti2024agentdojo\tsources/debenedetti2024agentdojo.txt\tsources/debenedetti2024agentdojo.txt\tsource_text\n",
+        encoding="utf-8",
+    )
+    title_review.write_text(
+        json.dumps(
+            {
+                "citation_key": "debenedetti2024agentdojo",
+                "source_text": "paper/.refgate/sources/debenedetti2024agentdojo.txt",
+                "decision": "accepted_official_metadata_mismatch",
+                "expected_title": expected_title,
+                "source_title": observed_title,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(
+        [
+            "check-source-titles",
+            "--lock",
+            str(lock),
+            "--source-map",
+            str(source_map),
+            "--title-review",
+            str(title_review),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["data"]["reviewed_mismatch_count"] == 1
+    assert payload["warnings"][0]["code"] == "SOURCE_TITLE_MISMATCH_REVIEWED"
 
 
 def test_paper_audit_blocks_when_mapped_source_title_mismatches_lock_title(tmp_path, capsys):

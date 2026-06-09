@@ -27,6 +27,21 @@ SUPPORTED_DECISIONS = {
 }
 
 
+def _evidence_confidence(item: dict[str, Any]) -> str:
+    overlap = int(item.get("overlap_score") or 0)
+    coverage = float(item.get("coverage") or 0.0)
+    quality = float(item.get("evidence_quality") or 0.0)
+    if overlap < 2 or coverage < 0.25 or item.get("title_like") or item.get("abstract_like") or quality < 0:
+        return "low"
+    if overlap >= 3 and coverage >= 0.5 and quality >= 0.5:
+        return "high"
+    return "medium"
+
+
+def _confidence_rank(value: str) -> int:
+    return {"high": 2, "medium": 1, "low": 0}.get(value, 0)
+
+
 def _display_path(path: str | Path, *, base_dir: Path) -> str:
     target = Path(path)
     try:
@@ -110,19 +125,20 @@ def _evidence_candidates_for_text(
         score = evidence_match_score(claim_text, block_text)
         if score["overlap_score"] <= 0:
             continue
-        candidates.append(
-            {
-                "block_label": block_label,
-                "quote_or_evidence": _clip_quote(block_text, max_quote_chars=max_quote_chars),
-                "overlap_score": score["overlap_score"],
-                "coverage": score["coverage"],
-                "matched_terms": score["matched_terms"],
-                "missing_terms": score["missing_terms"],
-                **_evidence_quality(block_label, block_text),
-            }
-        )
+        candidate = {
+            "block_label": block_label,
+            "quote_or_evidence": _clip_quote(block_text, max_quote_chars=max_quote_chars),
+            "overlap_score": score["overlap_score"],
+            "coverage": score["coverage"],
+            "matched_terms": score["matched_terms"],
+            "missing_terms": score["missing_terms"],
+            **_evidence_quality(block_label, block_text),
+        }
+        candidate["confidence"] = _evidence_confidence(candidate)
+        candidates.append(candidate)
     candidates.sort(
         key=lambda item: (
+            _confidence_rank(item["confidence"]),
             item["overlap_score"],
             item["coverage"],
             item["evidence_quality"],
@@ -175,6 +191,7 @@ def _evidence_candidate_for_source(
                 "evidence_quality": match.get("evidence_quality"),
                 "title_like": match.get("title_like"),
                 "abstract_like": match.get("abstract_like"),
+                "confidence": match.get("confidence"),
             }
             for match in matches
     ]
@@ -187,6 +204,11 @@ def _evidence_candidate_for_source(
             "coverage": best["coverage"],
             "matched_terms": best["matched_terms"],
             "missing_terms": best["missing_terms"],
+            "section_heading": best.get("section_heading"),
+            "evidence_quality": best.get("evidence_quality"),
+            "title_like": best.get("title_like"),
+            "abstract_like": best.get("abstract_like"),
+            "confidence": best.get("confidence"),
             "evidence_candidates": evidence_candidates,
         }
     )
@@ -339,6 +361,7 @@ def render_codex_review_bundle_markdown(bundle: dict[str, Any]) -> str:
             lines.append(f"- `{found}` {location}")
             if candidate.get("quote_or_evidence"):
                 quality_bits = [
+                    f"confidence={candidate.get('confidence')}",
                     f"overlap={candidate.get('overlap_score')}",
                     f"coverage={candidate.get('coverage')}",
                     f"quality={candidate.get('evidence_quality')}",
@@ -355,6 +378,7 @@ def render_codex_review_bundle_markdown(bundle: dict[str, Any]) -> str:
                 lines.append(f"  - Alternative {index}: {evidence_candidate.get('source_location', '')}")
                 lines.append(
                     "    - Evidence metadata: "
+                    f"confidence={evidence_candidate.get('confidence')}, "
                     f"overlap={evidence_candidate.get('overlap_score')}, "
                     f"coverage={evidence_candidate.get('coverage')}, "
                     f"quality={evidence_candidate.get('evidence_quality')}"

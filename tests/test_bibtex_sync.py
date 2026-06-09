@@ -89,6 +89,40 @@ def test_sync_bibtex_plans_and_writes_agent_friendly_json(tmp_path, capsys):
     assert "Official Title" in output.read_text(encoding="utf-8")
 
 
+def test_sync_bibtex_output_keeps_blank_line_between_replaced_entries(tmp_path, capsys):
+    canonical = """@article{doe2026refgate,
+  title = {Official Title},
+  author = {Doe, Jane},
+  year = {2026}
+}
+"""
+    lock_data = {"schema_version": "refgate.lock.v1", "entries": [_lock_entry("doe2026refgate", canonical)]}
+    lock_data["entries"][0]["bibtex"]["normalized_sha256"] = sha256_text(canonical)
+    lock = tmp_path / "refgate.lock.json"
+    bib = tmp_path / "references.bib"
+    output = tmp_path / "references.refgate.bib"
+    lock.write_text(json.dumps(lock_data), encoding="utf-8")
+    bib.write_text(
+        """@article{doe2026refgate,
+  title = {Draft Title},
+  author = {Doe, Jane}
+}
+@article{smith2025other,
+  title = {Other Paper},
+  author = {Smith, Ada}
+}
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["sync-bibtex", "--bib", str(bib), "--lock", str(lock), "--output", str(output), "--json"])
+
+    text = output.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "}\n@article{smith2025other" not in text
+    assert "}\n\n@article{smith2025other" in text
+
+
 def test_sync_bibtex_blocks_when_lock_has_no_canonical_text(tmp_path, capsys):
     entry = _lock_entry("doe2026refgate", "@article{doe2026refgate,\n  title = {Official Title}\n}\n")
     entry["bibtex"].pop("canonical_text")

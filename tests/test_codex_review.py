@@ -124,6 +124,65 @@ def test_export_review_bundle_includes_multiple_evidence_candidates(tmp_path, ca
     assert exit_code == 0
     assert len(candidates) == 2
     assert candidates[0]["overlap_score"] >= candidates[1]["overlap_score"]
+    assert candidates[0]["confidence"] in {"medium", "high"}
+
+
+def test_export_review_bundle_marks_low_overlap_candidate_low_confidence(tmp_path, capsys):
+    tex = tmp_path / "paper.tex"
+    bib = tmp_path / "sample.bib"
+    lock = tmp_path / "refgate.lock.json"
+    claims = tmp_path / "refgate_claims.tsv"
+    source_map = tmp_path / "source_map.tsv"
+    source = tmp_path / "source.txt"
+    output = tmp_path / "bundle.json"
+    markdown = tmp_path / "bundle.md"
+    tex.write_text("\\cite{debenedetti2024agentdojo}\n", encoding="utf-8")
+    bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
+    lock.write_text((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8"), encoding="utf-8")
+    claims.write_text(
+        "claim_id\tmanuscript_location\tclaim_text\tcitation_key\tsource_location\tquote_or_evidence\tevidence_kind\tstatus\tnotes\tclaim_type\timportance\n"
+        "claim-0001\tline 10\tAgentDojo evaluates prompt injection attacks and defenses.\tdebenedetti2024agentdojo\t\t\t\tclaim_unchecked\t\trelated_work\tnormal\n",
+        encoding="utf-8",
+    )
+    source.write_text(
+        "[page 1]\n"
+        "AgentDojo is mentioned in a short index.\n\n"
+        "[page 2]\n"
+        "This unrelated body passage discusses database storage, replication, indexes, and recovery protocols.\n",
+        encoding="utf-8",
+    )
+    source_map.write_text(
+        "citation_key\tsource_text\tsource_label\tevidence_kind\n"
+        f"debenedetti2024agentdojo\t{source.name}\t{source.name}\tsource_text\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "export-review-bundle",
+            "--tex",
+            str(tex),
+            "--bib",
+            str(bib),
+            "--lock",
+            str(lock),
+            "--claims",
+            str(claims),
+            "--source-map",
+            str(source_map),
+            "--output",
+            str(output),
+            "--markdown",
+            str(markdown),
+            "--json",
+        ]
+    )
+
+    bundle = json.loads(output.read_text(encoding="utf-8"))
+    candidate = bundle["claims"][0]["source_candidates"][0]
+    assert exit_code == 0
+    assert candidate["confidence"] == "low"
+    assert "confidence=low" in markdown.read_text(encoding="utf-8")
 
 
 def test_import_review_keeps_supported_claims_in_review_by_default(tmp_path, capsys):

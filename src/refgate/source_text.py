@@ -5,6 +5,30 @@ from pathlib import Path
 from typing import Any
 
 
+PDF_EXTRA_INSTALL_COMMAND = 'python -m pip install "refgate[pdf]"'
+
+
+def pdf_text_extraction_available() -> bool:
+    try:
+        import pypdf  # type: ignore  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def pdf_text_extra_missing_issue(paths: list[str | Path]) -> dict[str, Any]:
+    pdf_paths = [str(path) for path in paths if Path(path).suffix.lower() == ".pdf"]
+    return {
+        "code": "PDF_TEXT_EXTRA_MISSING",
+        "message": "PDF source text extraction requires the optional pypdf dependency.",
+        "evidence": [
+            f"pdf_count={len(pdf_paths)}",
+            f"install={PDF_EXTRA_INSTALL_COMMAND}",
+            *pdf_paths[:5],
+        ],
+    }
+
+
 def read_source_text(path: str | Path) -> str:
     target = Path(path)
     if target.suffix.lower() == ".pdf":
@@ -16,7 +40,9 @@ def read_pdf_text(path: str | Path) -> str:
     try:
         from pypdf import PdfReader  # type: ignore
     except ImportError as exc:
-        raise RuntimeError("PDF text extraction requires the optional pypdf package.") from exc
+        raise RuntimeError(
+            f"PDF text extraction requires the optional pypdf package. Install with: {PDF_EXTRA_INSTALL_COMMAND}"
+        ) from exc
 
     reader = PdfReader(str(path))
     pages = []
@@ -30,6 +56,24 @@ def read_pdf_text(path: str | Path) -> str:
 def validate_source_text(paths: list[str | Path], *, min_chars: int = 80) -> dict[str, Any]:
     results = []
     blocking = []
+    pdf_paths = [path for path in paths if Path(path).suffix.lower() == ".pdf"]
+    if pdf_paths and not pdf_text_extraction_available():
+        return {
+            "min_chars": min_chars,
+            "results": [
+                {
+                    "path": str(path),
+                    "kind": "pdf" if Path(path).suffix.lower() == ".pdf" else "text",
+                    "char_count": 0,
+                    "page_marker_count": 0,
+                    "ok": False if Path(path).suffix.lower() == ".pdf" else None,
+                    "error": "pypdf_missing" if Path(path).suffix.lower() == ".pdf" else None,
+                }
+                for path in paths
+            ],
+            "ok": False,
+            "blocking_issues": [pdf_text_extra_missing_issue(pdf_paths)],
+        }
     for path in paths:
         target = Path(path)
         try:

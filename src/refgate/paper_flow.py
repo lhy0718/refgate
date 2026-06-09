@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 import shlex
 from pathlib import Path
 from typing import Any, Literal
@@ -30,6 +31,15 @@ SUMMARY_KEY_LIMIT = 10
 SOURCE_MAP_COLUMNS = ["citation_key", "source_text", "source_label", "evidence_kind"]
 SOURCE_FILE_SUFFIXES = {".pdf", ".txt"}
 REFGATE_COMMAND = "python -m refgate"
+CLAIM_REPRESENTATIVE_CODES = {
+    "CLAIM_STATUS_NOT_FINAL",
+    "CLAIM_EVIDENCE_LOW_OVERLAP",
+    "CLAIM_EVIDENCE_MISSING",
+    "CLAIM_SOURCE_LOCATION_MISSING",
+    "CLAIM_WEAK_EVIDENCE_NOT_CHECKABLE",
+    "CLAIM_MAY_BE_TOO_STRONG",
+    "CLAIM_EVIDENCE_NOT_FOUND_IN_SOURCE",
+}
 
 
 def summarize_citation_keys(citation_keys: list[str]) -> dict[str, Any]:
@@ -61,6 +71,78 @@ def summarize_issues(issues: list[Any]) -> list[dict[str, Any]]:
         key_summary = summarize_citation_keys(summary.pop("citation_keys"))
         summary.update(key_summary)
     return list(summaries.values())
+
+
+def _claim_id_from_issue(issue: AuditIssue) -> str | None:
+    match = re.search(r"\bclaim[-_]\d+\b", issue.message)
+    return match.group(0) if match else None
+
+
+def _dedupe_issues(issues: list[AuditIssue]) -> list[AuditIssue]:
+    deduped: list[AuditIssue] = []
+    seen: set[tuple[str, str, str | None, tuple[str, ...]]] = set()
+    for issue in issues:
+        key = (issue.code, issue.severity, issue.citation_key, tuple(issue.evidence))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(issue)
+    return deduped
+
+
+def _collapse_redundant_claim_blockers(issues: list[AuditIssue]) -> list[AuditIssue]:
+    representative_claim_ids = {
+        claim_id
+        for issue in issues
+        if issue.code in CLAIM_REPRESENTATIVE_CODES
+        for claim_id in [_claim_id_from_issue(issue)]
+        if claim_id
+    }
+    if not representative_claim_ids:
+        return issues
+    collapsed: list[AuditIssue] = []
+    for issue in issues:
+        claim_id = _claim_id_from_issue(issue)
+        if issue.code == "CLAIM_NOT_CHECKED" and claim_id in representative_claim_ids:
+            continue
+        collapsed.append(issue)
+    return collapsed
+
+
+def _issue_phase(code: str) -> str:
+    if code.startswith("SOURCE_TITLE"):
+        return "source_title"
+    if code.startswith("CLAIM") or code.startswith("SOURCE_TEXT") or code == "PDF_TEXT_EXTRA_MISSING":
+        return "claim_review"
+    if code.startswith("CITATION") or code.startswith("BIB_ENTRY") or code.startswith("TEX"):
+        return "manuscript"
+    return "bibliography"
+
+
+def phase_summary_for_issues(issues: list[AuditIssue]) -> list[dict[str, Any]]:
+    phase_labels = {
+        "bibliography": "bibliography",
+        "manuscript": "manuscript",
+        "source_title": "source-title",
+        "claim_review": "claim review",
+    }
+    phases: dict[str, dict[str, Any]] = {
+        key: {"phase": label, "blocking_count": 0, "warning_count": 0, "blocking_codes": [], "warning_codes": []}
+        for key, label in phase_labels.items()
+    }
+    for issue in issues:
+        phase = phases[_issue_phase(issue.code)]
+        if issue.severity == "blocking":
+            phase["blocking_count"] += 1
+            if issue.code not in phase["blocking_codes"]:
+                phase["blocking_codes"].append(issue.code)
+        else:
+            phase["warning_count"] += 1
+            if issue.code not in phase["warning_codes"]:
+                phase["warning_codes"].append(issue.code)
+    for phase in phases.values():
+        phase["status"] = "blocked" if phase["blocking_count"] else "passed"
+    return list(phases.values())
 
 
 def _issue_from_payload(payload: dict[str, Any], *, severity: Literal["blocking", "warning"]) -> AuditIssue:
@@ -155,6 +237,7 @@ def render_paper_claim_review_report(
     suggestions = claim_source_check.get("suggestions", [])
     missing_source_keys = claim_source_check.get("missing_source_keys", [])
     no_match_claims = claim_source_check.get("no_match_claims", [])
+    blocking_groups = _issue_payload_groups(blocking_issues)
 
     lines = [
         base_report,
@@ -164,7 +247,8 @@ def render_paper_claim_review_report(
         f"- Source map: {claim_source_check.get('source_map') or '(none)'}",
         f"- Sources: {claim_source_check.get('source_count', 0)}",
         f"- Evidence suggestions: {claim_source_check.get('updated', 0)}",
-        f"- Blocking source-check issues: {len(blocking_issues)}",
+        f"- Blocking source-check groups: {len(blocking_groups)}",
+        f"- Blocking source-check rows: {len(blocking_issues)}",
         f"- Warnings: {len(warnings)}",
         "",
         "## Source-Check Review Queues",
@@ -189,20 +273,70 @@ def render_paper_claim_review_report(
             lines.append(f"- `{item.get('claim_id', '')}` / `{item.get('citation_key', '')}`")
         lines.append("")
     if blocking_issues:
-        lines.extend(["### Blocking Issues", ""])
-        for issue in blocking_issues:
-            citation_key = issue.get("citation_key") or ""
-            evidence = ", ".join(str(item) for item in issue.get("evidence", []))
-            suffix = f" ({evidence})" if evidence else ""
-            lines.append(f"- `{issue.get('code', '')}` `{citation_key}`: {issue.get('message', '')}{suffix}")
+        lines.extend(["### Blocking Issue Groups", ""])
+        lines.extend(_issue_payload_group_lines(blocking_groups))
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _generic_issue_payload_message(code: str, message: str) -> str:
+    if code == "CLAIM_NOT_CHECKED":
+        return "Claims are not marked checked."
+    if code == "CLAIM_STATUS_NOT_FINAL":
+        return "Claims have evidence but are not marked checked."
+    if code == "CLAIM_EVIDENCE_LOW_OVERLAP":
+        return "Claims have low lexical overlap with their evidence."
+    if code == "CLAIM_EVIDENCE_MISSING":
+        return "Claims have no evidence text."
+    if code == "CLAIM_SOURCE_LOCATION_MISSING":
+        return "Claims are checked but have no source location."
+    if code == "CLAIM_MAY_BE_TOO_STRONG":
+        return "Claims use strong wording that needs careful source support."
+    if code == "CLAIM_WEAK_EVIDENCE_NOT_CHECKABLE":
+        return "Claims use weak evidence that cannot be marked checked."
+    return message
+
+
+def _issue_payload_groups(issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    for issue in issues:
+        code = str(issue.get("code", ""))
+        message = _generic_issue_payload_message(code, str(issue.get("message", "")))
+        key = (code, message)
+        group = groups.setdefault(
+            key,
+            {
+                "code": key[0],
+                "message": key[1],
+                "count": 0,
+                "citation_keys": [],
+            },
+        )
+        group["count"] += 1
+        citation_key = issue.get("citation_key")
+        if citation_key and citation_key not in group["citation_keys"]:
+            group["citation_keys"].append(citation_key)
+    return list(groups.values())
+
+
+def _issue_payload_group_lines(groups: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for group in groups:
+        keys = [str(key) for key in group.get("citation_keys", [])]
+        key_text = ", ".join(f"`{key}`" for key in keys[:5])
+        more = f", ... {len(keys) - 5} more" if len(keys) > 5 else ""
+        suffix = f" ({key_text}{more})" if key_text else ""
+        lines.append(f"- `{group.get('code', '')}` x{group.get('count', 0)}: {group.get('message', '')}{suffix}")
+    return lines
+
+
 def render_claim_source_check_section(claim_source_check: dict[str, Any] | None) -> str:
     if not claim_source_check:
         return ""
+
+    blocking_issues = claim_source_check.get("blocking_issues", [])
+    blocking_groups = _issue_payload_groups(blocking_issues)
 
     lines = [
         "",
@@ -212,7 +346,8 @@ def render_claim_source_check_section(claim_source_check: dict[str, Any] | None)
         f"- Sources: {claim_source_check.get('source_count', 0)}",
         f"- Claims: {claim_source_check.get('claim_count', 0)}",
         f"- Evidence suggestions: {claim_source_check.get('updated', 0)}",
-        f"- Blocking issues: {len(claim_source_check.get('blocking_issues', []))}",
+        f"- Blocking groups: {len(blocking_groups)}",
+        f"- Blocking rows needing review: {len(blocking_issues)}",
         f"- Warnings: {len(claim_source_check.get('warnings', []))}",
         "",
     ]
@@ -250,17 +385,11 @@ def render_claim_source_check_section(claim_source_check: dict[str, Any] | None)
             lines.append(f"- ... {len(suggestions) - SUMMARY_KEY_LIMIT} more")
         lines.append("")
 
-    blocking_issues = claim_source_check.get("blocking_issues", [])
     if blocking_issues:
-        lines.extend(["### Blocking Issues", ""])
-        for issue in blocking_issues[:SUMMARY_KEY_LIMIT]:
-            citation_key = issue.get("citation_key") or ""
-            evidence = ", ".join(str(item) for item in issue.get("evidence", []))
-            evidence_text = f" [{evidence}]" if evidence else ""
-            key_text = f" `{citation_key}`" if citation_key else ""
-            lines.append(f"- `{issue.get('code', '')}`{key_text}: {issue.get('message', '')}{evidence_text}")
-        if len(blocking_issues) > SUMMARY_KEY_LIMIT:
-            lines.append(f"- ... {len(blocking_issues) - SUMMARY_KEY_LIMIT} more")
+        lines.extend(["### Blocking Issue Groups", ""])
+        lines.extend(_issue_payload_group_lines(blocking_groups[:SUMMARY_KEY_LIMIT]))
+        if len(blocking_groups) > SUMMARY_KEY_LIMIT:
+            lines.append(f"- ... {len(blocking_groups) - SUMMARY_KEY_LIMIT} more groups")
         lines.append("")
 
     warnings = claim_source_check.get("warnings", [])
@@ -505,6 +634,7 @@ def build_paper_audit_next_actions(
 
     claim_blocking_codes = {
         "CLAIM_NOT_CHECKED",
+        "CLAIM_STATUS_NOT_FINAL",
         "CLAIM_EVIDENCE_MISSING",
         "CLAIM_SOURCE_LOCATION_MISSING",
         "CLAIM_WEAK_EVIDENCE_NOT_CHECKABLE",
@@ -772,6 +902,7 @@ def run_paper_audit(
             _issue_from_payload(issue, severity="warning")
             for issue in source_title_check.get("warnings", [])
         )
+    issues = _dedupe_issues(_collapse_redundant_claim_blockers(issues))
     blocking = [issue for issue in issues if issue.severity == "blocking"]
     warnings = [issue for issue in issues if issue.severity == "warning"]
 
@@ -834,6 +965,7 @@ def run_paper_audit(
         "blocking_issues": [issue.to_dict() for issue in blocking],
         "warnings": [issue.to_dict() for issue in warnings],
         "next_actions": next_actions,
+        "phase_summary": phase_summary_for_issues(issues),
         "issue_summary": {
             "blocking": summarize_issues(blocking),
             "warnings": summarize_issues(warnings),

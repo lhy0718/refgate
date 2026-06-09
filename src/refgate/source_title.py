@@ -10,7 +10,7 @@ from typing import Any
 from .lockfile import load_lockfile
 from .models import AuditIssue
 from .resolver import normalize_title
-from .source_text import read_source_text
+from .source_text import pdf_text_extra_missing_issue, pdf_text_extraction_available, read_source_text
 
 
 ACCEPTED_TITLE_REVIEW_DECISIONS = {
@@ -40,6 +40,7 @@ def _source_map_rows(path: str | Path) -> list[dict[str, str]]:
             {
                 "citation_key": citation_key,
                 "source_text": str(source_path if source_path.is_absolute() else base_dir / source_path),
+                "source_text_raw": source_text,
                 "source_label": str(row.get("source_label", "") or Path(source_text).name),
                 "evidence_kind": str(row.get("evidence_kind", "") or row.get("source_kind", "") or "source_text"),
             }
@@ -63,11 +64,19 @@ def _read_jsonl(path: str | Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _resolve_review_source_text(value: str, review_path: Path) -> str:
+def _review_source_text_candidates(value: str, review_path: Path) -> list[str]:
     source_path = Path(value)
-    if not source_path.is_absolute():
-        source_path = review_path.parent / source_path
-    return str(source_path)
+    candidates = [value]
+    if source_path.is_absolute():
+        candidates.append(str(source_path))
+    else:
+        candidates.append(str(review_path.parent / source_path))
+        candidates.append(str(Path.cwd() / source_path))
+    deduped: list[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in deduped:
+            deduped.append(candidate)
+    return deduped
 
 
 def _load_title_reviews(path: str | Path | None) -> dict[str, list[dict[str, Any]]]:
@@ -81,7 +90,9 @@ def _load_title_reviews(path: str | Path | None) -> dict[str, list[dict[str, Any
             continue
         normalized = dict(row)
         if normalized.get("source_text"):
-            normalized["source_text"] = _resolve_review_source_text(str(normalized["source_text"]), review_path)
+            raw_source_text = str(normalized["source_text"]).strip()
+            normalized["source_text_raw"] = raw_source_text
+            normalized["source_text_candidates"] = _review_source_text_candidates(raw_source_text, review_path)
         reviews.setdefault(citation_key, []).append(normalized)
     return reviews
 
@@ -147,7 +158,20 @@ def source_title_candidates(text: str) -> list[str]:
 
 
 def _compact_title(title: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", normalize_title(title))
+    text = normalize_title(title)
+    text = re.sub(r"(?i)\\tau\b", "tau", text)
+    text = text.replace("τ", "tau")
+    text = re.sub(r"\$+", " ", text)
+    return re.sub(r"[^a-z0-9]", "", text)
+
+
+def _compact_title_matches(expected_compact: str, candidate_compact: str) -> bool:
+    if not expected_compact or not candidate_compact:
+        return False
+    if expected_compact in candidate_compact:
+        return True
+    partial_min_len = min(32, len(expected_compact))
+    return len(candidate_compact) >= partial_min_len and candidate_compact in expected_compact
 
 
 def source_title_matches(expected_title: str, candidates: list[str]) -> bool:
@@ -160,7 +184,7 @@ def source_title_matches(expected_title: str, candidates: list[str]) -> bool:
         if candidate_normalized == expected:
             return True
         candidate_compact = _compact_title(candidate)
-        if expected_compact and expected_compact in candidate_compact:
+        if _compact_title_matches(expected_compact, candidate_compact):
             return True
     return False
 
@@ -184,29 +208,82 @@ def _same_source_text_path(reviewed_source: str, source_text: str) -> bool:
     return Path(reviewed_source).resolve(strict=False) == Path(source_text).resolve(strict=False)
 
 
+def _source_text_values_for_row(row: dict[str, str]) -> list[str]:
+    values = [
+        row.get("source_text", ""),
+        row.get("source_text_raw", ""),
+        row.get("source_label", ""),
+    ]
+    source_text = row.get("source_text", "")
+    if source_text:
+        values.append(Path(source_text).name)
+    return [value for value in dict.fromkeys(values) if value]
+
+
+def _review_source_matches_row(review: dict[str, Any], row: dict[str, str]) -> bool:
+    reviewed_candidates = [str(value) for value in review.get("source_text_candidates", []) if str(value).strip()]
+    reviewed_raw = str(review.get("source_text_raw", "") or review.get("source_text", "")).strip()
+    if reviewed_raw and reviewed_raw not in reviewed_candidates:
+        reviewed_candidates.insert(0, reviewed_raw)
+    if not reviewed_candidates:
+        return True
+    row_values = _source_text_values_for_row(row)
+    for reviewed_source in reviewed_candidates:
+        for row_value in row_values:
+            if reviewed_source == row_value:
+                return True
+            if _same_source_text_path(reviewed_source, row_value):
+                return True
+    return False
+
+
+def _review_title_and_decision_match(
+    review: dict[str, Any],
+    *,
+    expected_title: str,
+    candidates: list[str],
+) -> bool:
+    decision = str(review.get("decision", "")).strip().lower()
+    if decision not in ACCEPTED_TITLE_REVIEW_DECISIONS:
+        return False
+    reviewed_expected = str(review.get("expected_title", "")).strip()
+    if not reviewed_expected or normalize_title(reviewed_expected) != normalize_title(expected_title):
+        return False
+    reviewed_source_title = str(
+        review.get("source_title", "") or review.get("source_candidate", "") or review.get("observed_title", "")
+    ).strip()
+    return bool(reviewed_source_title and _review_title_matches_current(reviewed_source_title, candidates))
+
+
 def _matching_title_review(
     *,
     reviews: dict[str, list[dict[str, Any]]],
     citation_key: str,
-    source_text: str,
+    row: dict[str, str],
     expected_title: str,
     candidates: list[str],
 ) -> dict[str, Any] | None:
-    expected_normalized = normalize_title(expected_title)
     for review in reviews.get(citation_key, []):
-        decision = str(review.get("decision", "")).strip().lower()
-        if decision not in ACCEPTED_TITLE_REVIEW_DECISIONS:
+        if not _review_title_and_decision_match(review, expected_title=expected_title, candidates=candidates):
             continue
-        reviewed_source = str(review.get("source_text", "")).strip()
-        if reviewed_source and not _same_source_text_path(reviewed_source, source_text):
+        if not _review_source_matches_row(review, row):
             continue
-        reviewed_expected = str(review.get("expected_title", "")).strip()
-        if not reviewed_expected or normalize_title(reviewed_expected) != expected_normalized:
+        return review
+    return None
+
+
+def _path_mismatched_title_review(
+    *,
+    reviews: dict[str, list[dict[str, Any]]],
+    citation_key: str,
+    row: dict[str, str],
+    expected_title: str,
+    candidates: list[str],
+) -> dict[str, Any] | None:
+    for review in reviews.get(citation_key, []):
+        if not _review_title_and_decision_match(review, expected_title=expected_title, candidates=candidates):
             continue
-        reviewed_source_title = str(
-            review.get("source_title", "") or review.get("source_candidate", "") or review.get("observed_title", "")
-        ).strip()
-        if not reviewed_source_title or not _review_title_matches_current(reviewed_source_title, candidates):
+        if _review_source_matches_row(review, row):
             continue
         return review
     return None
@@ -226,6 +303,28 @@ def check_source_titles(
     issues: list[AuditIssue] = []
     warnings: list[AuditIssue] = []
     seen: set[tuple[str, str]] = set()
+    pdf_sources = [row["source_text"] for row in rows if Path(row["source_text"]).suffix.lower() == ".pdf"]
+    if pdf_sources and not pdf_text_extraction_available():
+        issues.append(
+            AuditIssue(
+                code="PDF_TEXT_EXTRA_MISSING",
+                message="PDF source title extraction requires the optional pypdf dependency.",
+                severity="blocking",
+                evidence=pdf_text_extra_missing_issue(pdf_sources).get("evidence", []),
+            )
+        )
+        return {
+            "lock": str(lock_path),
+            "source_map": str(source_map_path),
+            "title_review": str(title_review_path) if title_review_path else None,
+            "checked": 0,
+            "ok_count": 0,
+            "reviewed_mismatch_count": 0,
+            "results": [],
+            "blocking_issues": [issue.to_dict() for issue in issues],
+            "warnings": [],
+            "ok": False,
+        }
 
     for row in rows:
         citation_key = row["citation_key"]
@@ -240,6 +339,7 @@ def check_source_titles(
             "citation_key": citation_key,
             "source_text": source_path,
             "source_label": row["source_label"],
+            "source_text_raw": row.get("source_text_raw", ""),
             "expected_title": expected_title,
             "ok": False,
             "title_candidates": [],
@@ -304,7 +404,7 @@ def check_source_titles(
             reviewed_mismatch = _matching_title_review(
                 reviews=title_reviews,
                 citation_key=citation_key,
-                source_text=source_path,
+                row=row,
                 expected_title=expected_title,
                 candidates=candidates,
             )
@@ -326,6 +426,32 @@ def check_source_titles(
                     )
                 )
             else:
+                path_mismatch = _path_mismatched_title_review(
+                    reviews=title_reviews,
+                    citation_key=citation_key,
+                    row=row,
+                    expected_title=expected_title,
+                    candidates=candidates,
+                )
+                if path_mismatch:
+                    result["review_path_mismatch"] = {
+                        "review_source_text": path_mismatch.get("source_text_raw") or path_mismatch.get("source_text"),
+                        "source_text": source_path,
+                        "source_label": row.get("source_label", ""),
+                    }
+                    warnings.append(
+                        AuditIssue(
+                            code="SOURCE_TITLE_REVIEW_PATH_MISMATCH",
+                            message="A matching source-title review exists, but its source_text does not match the current source-map row.",
+                            severity="warning",
+                            citation_key=citation_key,
+                            evidence=[
+                                f"review source_text: {result['review_path_mismatch']['review_source_text']}",
+                                f"source map source_text: {source_path}",
+                                f"source label: {row.get('source_label', '')}",
+                            ],
+                        )
+                    )
                 issues.append(
                     AuditIssue(
                         code="SOURCE_TITLE_MISMATCH",

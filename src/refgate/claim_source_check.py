@@ -85,6 +85,29 @@ def run_claim_source_check(
     source_map = _read_source_map(source_map_path)
     source_paths = sorted({source["source_text"] for sources in source_map.values() for source in sources})
     validation = validate_source_text(source_paths) if source_paths else {"ok": False, "blocking_issues": []}
+    if any(issue.get("code") == "PDF_TEXT_EXTRA_MISSING" for issue in validation.get("blocking_issues", [])):
+        return {
+            "ok": False,
+            "claims": str(claims_path),
+            "source_map": str(source_map_path),
+            "output": str(output_path) if output_path else None,
+            "claim_count": len(rows),
+            "source_count": len(source_paths),
+            "rerank": rerank,
+            "updated": 0,
+            "suggestions": [],
+            "missing_source_keys": [],
+            "no_match_claims": [],
+            "consistency_summary": {
+                "result_count": 0,
+                "ok_count": 0,
+                "blocking_issue_count": len(validation.get("blocking_issues", [])),
+                "warning_count": 0,
+            },
+            "consistency": [],
+            "blocking_issues": list(validation.get("blocking_issues", [])),
+            "warnings": [],
+        }
     source_text_cache: dict[str, str] = {}
     for path in source_paths:
         try:

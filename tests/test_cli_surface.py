@@ -439,6 +439,7 @@ def test_cli_paper_audit_can_build_source_map_from_citation_key_files(tmp_path, 
     assert "## Source-Check Summary" in claim_review.read_text(encoding="utf-8")
     report_text = report.read_text(encoding="utf-8")
     assert "## Claim Source Check" in report_text
+    assert "Blocking groups" in report_text
     assert "Evidence Suggestions Awaiting Review" in report_text
     assert "claim-0001" in report_text
 
@@ -470,6 +471,15 @@ def test_cli_paper_audit_can_build_source_map_from_citation_key_files(tmp_path, 
     second_payload = json.loads(capsys.readouterr().out)
     assert second_exit == 1
     assert any(issue["code"] == "CLAIM_STATUS_NOT_FINAL" for issue in second_payload["blocking_issues"])
+    assert not any(issue["code"] == "CLAIM_NOT_CHECKED" for issue in second_payload["blocking_issues"])
+    claim_phase = next(item for item in second_payload["data"]["phase_summary"] if item["phase"] == "claim review")
+    assert claim_phase["status"] == "blocked"
+    assert {item["phase"] for item in second_payload["data"]["phase_summary"]} == {
+        "bibliography",
+        "manuscript",
+        "source-title",
+        "claim review",
+    }
     assert second_payload["data"]["claim_source_check"]["updated"] == 0
     assert any(action["code"] == "REVIEW_CLAIM_EVIDENCE" for action in second_payload["next_actions"])
 
@@ -531,6 +541,7 @@ def test_cli_paper_audit_claim_review_summarizes_no_match_sources(tmp_path, caps
     assert "CLAIM_EVIDENCE_NOT_FOUND_IN_SOURCE" in review
     report_text = report.read_text(encoding="utf-8")
     assert "## Claim Source Check" in report_text
+    assert "Blocking Issue Groups" in report_text
     assert "No Evidence Match In Mapped Source" in report_text
     assert "CLAIM_EVIDENCE_NOT_FOUND_IN_SOURCE" in report_text
 

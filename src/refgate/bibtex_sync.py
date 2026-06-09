@@ -55,6 +55,17 @@ def _canonical_text(entry_bibtex: dict[str, Any]) -> str | None:
     return value + "\n"
 
 
+def _entry_text(text: str) -> str:
+    return text.strip()
+
+
+def _join_bibtex_blocks(blocks: list[str]) -> str:
+    cleaned = [block.strip() for block in blocks if block.strip()]
+    if not cleaned:
+        return ""
+    return "\n\n".join(cleaned) + "\n"
+
+
 def _sync_action(
     *,
     citation_key: str,
@@ -263,16 +274,18 @@ def sync_bibtex(
     synced_text = bib_text
     if replacements:
         chunks: list[str] = []
-        cursor = 0
+        preface = bib_text[: spans[0].start].strip() if spans else ""
+        if preface:
+            chunks.append(preface)
         for span in spans:
-            chunks.append(bib_text[cursor : span.start])
             if span.citation_key in replacements:
-                chunks.append(replacements[span.citation_key].strip())
+                chunks.append(_entry_text(replacements[span.citation_key]))
             else:
-                chunks.append(bib_text[span.start : span.end].strip())
-            cursor = span.end
-        chunks.append(bib_text[cursor:])
-        synced_text = "".join(chunks)
+                chunks.append(_entry_text(bib_text[span.start : span.end]))
+        tail = bib_text[spans[-1].end :].strip() if spans else bib_text.strip()
+        if tail:
+            chunks.append(tail)
+        synced_text = _join_bibtex_blocks(chunks)
 
     if additions:
         synced_text = synced_text.rstrip() + "\n\n" + "\n\n".join(item.strip() for item in additions) + "\n"

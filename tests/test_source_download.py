@@ -97,6 +97,25 @@ def test_source_download_derives_iclr_pdf_url_from_abstract_record():
     assert reason is None
 
 
+def test_source_download_derives_openreview_pdf_url_from_forum_record():
+    entry = LockEntry(
+        citation_key="liu2024agentbench",
+        short_title="AgentBench",
+        status="verified_manual_fallback",
+        record={"title": "AgentBench", "url": "https://openreview.net/forum?id=zAdUB0aCTQ"},
+        authority={"source": "openreview", "record_url": "https://openreview.net/forum?id=zAdUB0aCTQ"},
+        bibtex={"source_kind": "publisher_metadata_manual_normalized"},
+        resolver={},
+        checked_at="2026-06-09",
+    )
+
+    url, source, reason = source_pdf_url_for_entry(entry)
+
+    assert url == "https://openreview.net/pdf?id=zAdUB0aCTQ"
+    assert source == "openreview"
+    assert reason is None
+
+
 def test_source_download_prefers_official_bibtex_pdf_url_over_neurips_abstract_record():
     entry = LockEntry(
         citation_key="brown2020language",

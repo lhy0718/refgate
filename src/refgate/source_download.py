@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 from typing import Any, Callable
+from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
 from .bibtex import parse_bibtex_entry
@@ -88,6 +89,20 @@ def _url_from_iclr_record(url: str) -> str | None:
     pdf_url = re.sub(r"-Abstract(?=[-.])", "-Paper", pdf_url)
     pdf_url = re.sub(r"\.html(?:[?#].*)?$", ".pdf", pdf_url)
     return pdf_url if pdf_url != url else None
+
+
+def _url_from_openreview_record(url: str) -> str | None:
+    parsed = urlparse(url)
+    if parsed.netloc.lower() != "openreview.net":
+        return None
+    paper_id = parse_qs(parsed.query).get("id", [""])[0].strip()
+    if not paper_id:
+        return None
+    if parsed.path.rstrip("/").lower() == "/pdf":
+        return f"https://openreview.net/pdf?id={paper_id}"
+    if parsed.path.rstrip("/").lower() == "/forum":
+        return f"https://openreview.net/pdf?id={paper_id}"
+    return None
 
 
 def _url_from_pmlr_record(url: str) -> str | None:
@@ -178,6 +193,8 @@ def _source_from_pdf_url(url: str, fallback: str | None = None) -> str | None:
         return "acl"
     if "proceedings.iclr.cc/" in lowered:
         return "iclr"
+    if "openreview.net/" in lowered:
+        return "openreview"
     if "proceedings.neurips.cc/" in lowered:
         return "neurips"
     if "proceedings.mlr.press/" in lowered:
@@ -236,6 +253,9 @@ def source_pdf_url_for_entry(entry: LockEntry) -> tuple[str | None, str | None, 
         iclr_url = _url_from_iclr_record(url)
         if iclr_url:
             return iclr_url, "iclr", None
+        openreview_url = _url_from_openreview_record(url)
+        if openreview_url:
+            return openreview_url, "openreview", None
         pmlr_url = _url_from_pmlr_record(url)
         if pmlr_url:
             return pmlr_url, "pmlr", None

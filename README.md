@@ -180,6 +180,10 @@ checked. When source evidence checking is active, `paper-audit` also writes a
 claim review Markdown file by default, or to `--claim-review-output` when
 provided; this report includes source-check queues for missing mapped sources
 and mapped sources with no matching evidence block.
+PDF extraction requires the optional `pypdf` dependency. If Refgate reports
+`PDF_TEXT_EXTRA_MISSING`, install the PDF extra with
+`python -m pip install "refgate[pdf]"` or use a runtime where that extra is
+already available.
 The same source mapping also runs a source-title gate: the first-page title
 candidate from each mapped source file must match the lockfile/BibTeX title, or
 submission mode blocks with `SOURCE_TITLE_MISMATCH`. Use `check-source-titles`
@@ -189,7 +193,8 @@ different because of an accepted publisher/arXiv metadata mismatch, keep the
 gate blocking by default and pass a reviewed JSONL file with `--title-review`.
 Each accepted line must name the citation key, accepted decision, current
 lockfile title, and current first-page source title; stale or underspecified
-reviews do not clear the blocker.
+reviews do not clear the blocker. Review paths may use the source-map label,
+source-map path, an absolute path, or a cwd-relative path.
 Use `download-sources` before source mapping when the lockfile contains a
 deterministic official/arXiv/venue PDF location. Without `--live`, it only
 returns a plan and follow-up action; with `--live`, it writes citation-key named
@@ -248,7 +253,8 @@ After lockfile provenance is filled, use `sync-bibtex` to produce an
 agent-friendly synchronization plan or write a reviewed `.bib` output from the
 lockfile canonical BibTeX text. It is network-free, JSON-first, dry-run by
 default, and refuses to synthesize entries when the lockfile lacks canonical
-BibTeX text.
+BibTeX text. Written output preserves a blank line between BibTeX entries so
+agents can review the candidate file before in-place replacement.
 Use `monitor-official-records` on a lockfile to find arXiv fallback or
 official-record-pending rows and generate targeted official-source
 `reference-check` commands. It is network-free by default; add `--live` only

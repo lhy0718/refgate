@@ -159,11 +159,15 @@ official record title and source first-page title intentionally differ, pass a
 reviewed source-title JSONL file with `--title-review`; accepted lines must
 include the current `citation_key`, `decision`, `expected_title`, and
 `source_title`, with optional `source_text`, `reviewer`, and `notes`.
+If a PDF-backed source check returns `PDF_TEXT_EXTRA_MISSING`, rerun in a
+runtime with `pypdf` installed or install the extra with
+`python -m pip install "refgate[pdf]"`.
 
 For Codex-assisted claim review, export a review bundle after source mapping.
 The bundle includes multiple deterministic evidence candidates per mapped source;
 increase `--max-candidates-per-source` when the first candidate is title-like or
-too short. Read each claim against the mapped source text/PDF, then write one
+too short. Treat `confidence=low` candidates as review warnings, not support.
+Read each claim against the mapped source text/PDF, then write one
 JSON object per claim to `.refgate/codex_review_result.jsonl`. Use
 `import-review` to create a reviewed claim TSV. By default imported supported
 claims remain `needs_review`; use `--allow-checked` only when the user has

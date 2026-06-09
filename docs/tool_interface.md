@@ -251,6 +251,10 @@ wording that needs careful source support during submission mode.
 reviewed text/PDF files and still leaves claims in human-review status. For
 extractable PDFs, source locations preserve page labels when the text extractor
 provides them.
+PDF extraction requires the optional `pypdf` dependency. If source-map or
+source-title checks return `PDF_TEXT_EXTRA_MISSING`, install the extra with
+`python -m pip install "refgate[pdf]"` or rerun with a Python runtime where the
+extra is available.
 Evidence ranking is deterministic and demotes title-like or abstract-like
 matches when a fuller body passage has comparable lexical support. Suggestions
 include overlap, coverage, matched/missing terms, page-aware location, and
@@ -266,7 +270,9 @@ title mismatch can be accepted with `--title-review REVIEW.jsonl`; each JSONL
 object must include `citation_key`, an accepted `decision`, `expected_title`,
 and `source_title`, and may include `source_text`, `reviewer`, and `notes`.
 The gate still blocks if the review does not match the current lock title and
-current first-page source title.
+current first-page source title. Review `source_text` values may be absolute,
+cwd-relative, source-map-relative by label/path, or omitted when the review is
+unambiguous for that citation key and title.
 `download-sources` is network-free by default: it derives citation-key PDF
 targets from lockfile URLs, arXiv IDs, ACL Anthology records, or known venue PDF
 URL patterns and returns a plan. Add `--live` only when the user has opted into
@@ -277,10 +283,13 @@ been filled. It reads only the lockfile's canonical BibTeX text, returns a
 dry-run JSON action list by default, and writes only with `--output` or
 `--in-place`. It blocks instead of reconstructing a bibliography entry when the
 lockfile lacks canonical text or has a non-passing provenance status.
+Written output preserves blank lines between entries.
 `export-review-bundle` is the Codex handoff surface for claim-to-source review.
 It packages claim rows, lockfile provenance summaries, citation-key source
 paths, multiple deterministic evidence candidates per mapped source, and a
-JSONL result template. Use `--max-candidates-per-source` when Codex needs a
+JSONL result template. Candidates include `confidence` metadata so low-overlap,
+title-like, abstract-like, or weak body candidates are visibly marked for
+review. Use `--max-candidates-per-source` when Codex needs a
 broader passage queue than the default top five candidates. It does not call
 Codex, a local LLM, or any external model. `import-review` validates that JSONL
 result and writes a new claim TSV. Supported claims remain `needs_review` by
