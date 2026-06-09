@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .assist import build_resolver_assist
-from .audit import audit_bibliography
+from .audit import audit_bibliography_result
 from .bootstrap import bootstrap_paper
 from .claim_audit import (
     _row_citation_keys,
@@ -921,7 +921,9 @@ def run_paper_audit(
     bib_text = bib_path.read_text(encoding="utf-8")
     tex_text = tex_document.combined_text
     lockfile = load_lockfile(lock_path)
-    issues = audit_bibliography(bib_text, lockfile, submission=submission)
+    bibliography_audit = audit_bibliography_result(bib_text, lockfile, submission=submission)
+    accepted_provenance_notes = bibliography_audit.accepted_provenance_notes
+    issues = list(bibliography_audit.issues)
     issues.extend(tex_document.issues)
     issues.extend(audit_tex_bib_consistency(tex_text, bib_text, submission=submission))
     issues.extend(audit_claims_table(claims_path, submission=submission))
@@ -949,7 +951,11 @@ def run_paper_audit(
 
     if report:
         Path(report).parent.mkdir(parents=True, exist_ok=True)
-        report_text = render_markdown_report(lockfile, issues)
+        report_text = render_markdown_report(
+            lockfile,
+            issues,
+            accepted_provenance_notes=accepted_provenance_notes,
+        )
         report_text += render_claim_source_check_section(claim_source_check)
         report_text += render_source_title_check_section(source_title_check)
         Path(report).write_text(report_text, encoding="utf-8")
@@ -1005,6 +1011,8 @@ def run_paper_audit(
         "handoff": handoff,
         "blocking_issues": [issue.to_dict() for issue in blocking],
         "warnings": [issue.to_dict() for issue in warnings],
+        "accepted_provenance_notes": [issue.to_dict() for issue in accepted_provenance_notes],
+        "accepted_provenance_summary": summarize_issues(accepted_provenance_notes),
         "next_actions": next_actions,
         "phase_summary": phase_summary_for_issues(issues),
         "issue_summary": {

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .bibtex import parse_bibtex_file, sha256_text, split_bibtex_entries
 from .models import AuditIssue, Lockfile
 from .resolver import normalize_author, normalize_title
@@ -12,6 +14,14 @@ PASSING_STATUSES = {
 
 BLOCKED_SOURCE_KINDS = {"generated_unverified", "unknown"}
 FALLBACK_SOURCE_KINDS = {"publisher_metadata_manual_normalized", "arxiv_manual_normalized"}
+VERIFIED_PROVENANCE_SOURCE_KINDS = {"official_export", "publisher_metadata_manual_normalized", "arxiv_manual_normalized"}
+DOI_ABSENCE_FIELD_CHECKS = {"missing", "not_applicable", "absent"}
+
+
+@dataclass
+class BibliographyAuditResult:
+    issues: list[AuditIssue]
+    accepted_provenance_notes: list[AuditIssue]
 
 
 def _same_author_name(left: str, right: str) -> bool:
@@ -26,8 +36,37 @@ def _same_author_name(left: str, right: str) -> bool:
     return bool(left_parts) and left_parts == right_parts
 
 
-def audit_bibliography(bib_text: str, lockfile: Lockfile, submission: bool = False) -> list[AuditIssue]:
+def _authority_source(lock_entry) -> str:
+    return str(lock_entry.authority.get("source") or "").strip().lower()
+
+
+def _authority_record_url(lock_entry) -> str:
+    return str(lock_entry.authority.get("record_url") or "").strip().lower()
+
+
+def _is_verified_arxiv_fallback(lock_entry, source_kind: str) -> bool:
+    if lock_entry.status != "arxiv_fallback_verified":
+        return False
+    return (
+        source_kind == "arxiv_manual_normalized"
+        or _authority_source(lock_entry) == "arxiv"
+        or "arxiv.org" in _authority_record_url(lock_entry)
+    )
+
+
+def _has_verified_doi_absence(lock_entry, source_kind: str) -> bool:
+    if lock_entry.status not in PASSING_STATUSES:
+        return False
+    if source_kind not in VERIFIED_PROVENANCE_SOURCE_KINDS:
+        return False
+    field_checks = lock_entry.bibtex.get("field_checks") or {}
+    doi_check = str(field_checks.get("doi") or "").strip().lower()
+    return doi_check in DOI_ABSENCE_FIELD_CHECKS
+
+
+def audit_bibliography_result(bib_text: str, lockfile: Lockfile, submission: bool = False) -> BibliographyAuditResult:
     issues: list[AuditIssue] = []
+    accepted_provenance_notes: list[AuditIssue] = []
     bib_entries = parse_bibtex_file(bib_text)
     raw_entries = {}
     for raw in split_bibtex_entries(bib_text):
@@ -166,22 +205,36 @@ def audit_bibliography(bib_text: str, lockfile: Lockfile, submission: bool = Fal
                         citation_key=citation_key,
                     )
                 )
-            issues.append(
-                AuditIssue(
-                    code="ARXIV_FALLBACK",
-                    message="Entry uses arXiv fallback rather than final publication BibTeX.",
-                    severity="warning",
-                    citation_key=citation_key,
-                )
+            arxiv_fallback_issue = AuditIssue(
+                code="ARXIV_FALLBACK",
+                message="Entry uses arXiv fallback rather than final publication BibTeX.",
+                severity="warning",
+                citation_key=citation_key,
             )
+            if _is_verified_arxiv_fallback(lock_entry, source_kind):
+                accepted_provenance_notes.append(arxiv_fallback_issue)
+            else:
+                issues.append(arxiv_fallback_issue)
 
         if not lock_entry.record.get("doi"):
+            doi_missing_issue = AuditIssue(
+                code="DOI_MISSING",
+                message="Lockfile record has no DOI.",
+                severity="warning",
+                citation_key=citation_key,
+            )
+            if _has_verified_doi_absence(lock_entry, source_kind):
+                accepted_provenance_notes.append(doi_missing_issue)
+            else:
+                issues.append(doi_missing_issue)
+        elif not bib_entry.get("doi"):
             issues.append(
                 AuditIssue(
                     code="DOI_MISSING",
-                    message="Lockfile record has no DOI.",
+                    message="BibTeX entry is missing DOI present in the lockfile record.",
                     severity="warning",
                     citation_key=citation_key,
+                    evidence=[str(lock_entry.record.get("doi"))],
                 )
             )
 
@@ -196,4 +249,8 @@ def audit_bibliography(bib_text: str, lockfile: Lockfile, submission: bool = Fal
                     citation_key=citation_key,
                 )
             )
-    return issues
+    return BibliographyAuditResult(issues=issues, accepted_provenance_notes=accepted_provenance_notes)
+
+
+def audit_bibliography(bib_text: str, lockfile: Lockfile, submission: bool = False) -> list[AuditIssue]:
+    return audit_bibliography_result(bib_text, lockfile, submission=submission).issues

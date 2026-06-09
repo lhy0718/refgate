@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .assist import build_resolver_assist
-from .audit import audit_bibliography
+from .audit import audit_bibliography_result
 from .auth import AUTH_SOURCES, auth_doctor, auth_status, save_auth_value, select_auth_sources
 from .bibtex import parse_bibtex_entry, sha256_text
 from .bibtex_sync import sync_bibtex
@@ -431,11 +431,13 @@ def cmd_normalize_bibtex(args: argparse.Namespace) -> int:
 def cmd_audit_bib(args: argparse.Namespace) -> int:
     bib_text = Path(args.bib).read_text(encoding="utf-8")
     lockfile = load_lockfile(args.lock)
-    issues = audit_bibliography(bib_text, lockfile, submission=args.submission)
+    audit_result = audit_bibliography_result(bib_text, lockfile, submission=args.submission)
+    issues = audit_result.issues
     result = {
         "ok": not any(issue.severity == "blocking" for issue in issues),
         "blocking_issues": [issue.to_dict() for issue in issues if issue.severity == "blocking"],
         "warnings": [issue.to_dict() for issue in issues if issue.severity == "warning"],
+        "accepted_provenance_notes": [issue.to_dict() for issue in audit_result.accepted_provenance_notes],
     }
     write_json(result)
     return 0 if result["ok"] else 1
@@ -692,7 +694,8 @@ def cmd_evidence_suggest_bundle(args: argparse.Namespace) -> int:
 def cmd_audit(args: argparse.Namespace) -> int:
     bib_text = Path(args.bib).read_text(encoding="utf-8")
     lockfile = load_lockfile(args.lock)
-    issues = audit_bibliography(bib_text, lockfile, submission=args.submission)
+    bibliography_audit = audit_bibliography_result(bib_text, lockfile, submission=args.submission)
+    issues = list(bibliography_audit.issues)
     if args.tex:
         tex_document = load_tex_document(args.tex, submission=args.submission)
         issues.extend(tex_document.issues)
@@ -709,12 +712,16 @@ def cmd_audit(args: argparse.Namespace) -> int:
         )
 
     if args.report:
-        Path(args.report).write_text(render_markdown_report(lockfile, issues), encoding="utf-8")
+        Path(args.report).write_text(
+            render_markdown_report(lockfile, issues, accepted_provenance_notes=bibliography_audit.accepted_provenance_notes),
+            encoding="utf-8",
+        )
     blocking = [issue for issue in issues if issue.severity == "blocking"]
     result = {
         "ok": not blocking,
         "blocking_issues": [issue.to_dict() for issue in issues if issue.severity == "blocking"],
         "warnings": [issue.to_dict() for issue in issues if issue.severity == "warning"],
+        "accepted_provenance_notes": [issue.to_dict() for issue in bibliography_audit.accepted_provenance_notes],
         "report": args.report,
     }
     write_json(result)
@@ -724,7 +731,8 @@ def cmd_audit(args: argparse.Namespace) -> int:
 def cmd_export_handoff(args: argparse.Namespace) -> int:
     bib_text = Path(args.bib).read_text(encoding="utf-8")
     lockfile = load_lockfile(args.lock)
-    issues = audit_bibliography(bib_text, lockfile, submission=args.submission)
+    bibliography_audit = audit_bibliography_result(bib_text, lockfile, submission=args.submission)
+    issues = bibliography_audit.issues
     blocking = [issue for issue in issues if issue.severity == "blocking"]
     if blocking and not args.allow_blocking:
         write_json(

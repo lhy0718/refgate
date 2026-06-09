@@ -161,6 +161,41 @@ def test_cli_paper_audit_bootstraps_common_tex_bib_repo(tmp_path, capsys):
     assert "next_actions" not in payload["data"]
 
 
+def test_cli_paper_audit_separates_accepted_provenance_notes(tmp_path, capsys):
+    report = tmp_path / "refgate_audit.md"
+    exit_code = main(
+        [
+            "paper-audit",
+            "--tex",
+            str(FIXTURES / "manuscript.tex"),
+            "--bib",
+            str(FIXTURES / "sample.bib"),
+            "--lock",
+            str(FIXTURES / "refgate.lock.json"),
+            "--claims",
+            str(FIXTURES / "claims_checked.tsv"),
+            "--report",
+            str(report),
+            "--resolver-output",
+            str(tmp_path / "resolver_queries.json"),
+            "--submission",
+            "--include-issues",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    report_text = report.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert payload["warnings"] == []
+    accepted = payload["data"]["accepted_provenance_notes"]
+    assert [note["code"] for note in accepted] == ["DOI_MISSING"]
+    assert "- Warnings: 0" in report_text
+    assert "- Accepted provenance notes: 1" in report_text
+    assert "## Accepted Provenance Notes" in report_text
+    assert "`DOI_MISSING` `debenedetti2024agentdojo`" in report_text
+
+
 def test_cli_paper_audit_writes_next_plan_manifest(tmp_path, capsys):
     tex = tmp_path / "paper.tex"
     bib = tmp_path / "references.bib"

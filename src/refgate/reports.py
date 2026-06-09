@@ -67,8 +67,14 @@ def _issue_summary_lines(issues: list[AuditIssue]) -> list[str]:
     return lines
 
 
-def render_markdown_report(lockfile: Lockfile, issues: list[AuditIssue] | None = None) -> str:
+def render_markdown_report(
+    lockfile: Lockfile,
+    issues: list[AuditIssue] | None = None,
+    *,
+    accepted_provenance_notes: list[AuditIssue] | None = None,
+) -> str:
     issues = issues or []
+    accepted_provenance_notes = accepted_provenance_notes or []
     blocking = [issue for issue in issues if issue.severity == "blocking"]
     warnings = [issue for issue in issues if issue.severity == "warning"]
     official = [entry for entry in lockfile.entries if entry.bibtex.get("source_kind") == "official_export"]
@@ -88,6 +94,7 @@ def render_markdown_report(lockfile: Lockfile, issues: list[AuditIssue] | None =
         f"- Entries: {len(lockfile.entries)}",
         f"- Blocking issues: {len(blocking)}",
         f"- Warnings: {len(warnings)}",
+        f"- Accepted provenance notes: {len(accepted_provenance_notes)}",
         "",
         "## Phase Status",
         "",
@@ -105,6 +112,13 @@ def render_markdown_report(lockfile: Lockfile, issues: list[AuditIssue] | None =
     lines.extend(["", "## Warnings", ""])
     if warnings:
         for issue in warnings:
+            key = f" `{issue.citation_key}`" if issue.citation_key else ""
+            lines.append(f"- `{issue.code}`{key}: {issue.message}")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Accepted Provenance Notes", ""])
+    if accepted_provenance_notes:
+        for issue in accepted_provenance_notes:
             key = f" `{issue.citation_key}`" if issue.citation_key else ""
             lines.append(f"- `{issue.code}`{key}: {issue.message}")
     else:

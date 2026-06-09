@@ -4,11 +4,12 @@
 
 - Entries: 1
 - Blocking issues: 0
-- Warnings: 1
+- Warnings: 0
+- Accepted provenance notes: 1
 
 ## Phase Status
 
-- bibliography: passed (0 blocking, 1 warnings)
+- bibliography: passed (0 blocking, 0 warnings)
 - manuscript: passed (0 blocking, 0 warnings)
 - source-title: passed (0 blocking, 0 warnings)
 - claim review: passed (0 blocking, 0 warnings)
@@ -18,6 +19,10 @@
 - None
 
 ## Warnings
+
+- None
+
+## Accepted Provenance Notes
 
 - `DOI_MISSING` `debenedetti2024agentdojo`: Lockfile record has no DOI.
 

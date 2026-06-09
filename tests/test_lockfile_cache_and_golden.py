@@ -4,7 +4,7 @@ from refgate.cache import RawRecord, read_raw_record, write_raw_record
 from refgate.lockfile import merge_lock_entry
 from refgate.models import Lockfile
 from refgate.reports import render_markdown_report
-from refgate.audit import audit_bibliography
+from refgate.audit import audit_bibliography_result
 from refgate.claim_audit import audit_claims_table
 import json
 
@@ -45,8 +45,12 @@ def test_merge_lock_entry_replaces_existing_key():
 def test_audit_report_matches_golden():
     bib_text = (FIXTURES / "sample.bib").read_text(encoding="utf-8")
     lockfile = Lockfile.from_dict(json.loads((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8")))
-    issues = audit_bibliography(bib_text, lockfile, submission=True)
-    report = render_markdown_report(lockfile, issues)
+    audit_result = audit_bibliography_result(bib_text, lockfile, submission=True)
+    report = render_markdown_report(
+        lockfile,
+        audit_result.issues,
+        accepted_provenance_notes=audit_result.accepted_provenance_notes,
+    )
 
     assert report == (GOLDEN / "audit_pass_report.md").read_text(encoding="utf-8")
 
