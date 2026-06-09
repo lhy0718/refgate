@@ -60,7 +60,9 @@ refgate paper-audit --tex paper.tex --bib references.bib --lock refgate.lock.jso
 
 The first run may intentionally return `ok=false`; that is the gate showing
 which references lack provenance and which claims still need source evidence.
-Do not mask that result. Read `.refgate/next_plan.json` with:
+Do not mask that result. Treat `warnings` as unresolved review work, but treat
+`accepted_provenance_notes` as verified provenance records such as reviewed
+arXiv fallback or reviewed DOI absence. Read `.refgate/next_plan.json` with:
 
 ```bash
 refgate run-next --from .refgate/next_plan.json --json

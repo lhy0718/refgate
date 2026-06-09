@@ -161,6 +161,9 @@ python -m refgate render-report --lock tests/fixtures/refgate.lock.json --output
 work items are written to `--resolver-output`, and blocking issues are grouped
 by code with citation-key samples. Add `--include-work-items` or
 `--include-issues` when the full inline data is needed.
+Unresolved bibliography warnings remain in `warnings`; verified provenance
+records such as reviewed arXiv fallbacks or reviewed DOI absence are separated
+into `accepted_provenance_notes` so agents do not treat them as new work.
 Its `next_actions` field gives deterministic follow-up commands for the current
 state, such as resolving reference provenance, adding citation-key named source
 files, reviewing no-match claims, or exporting a handoff artifact after a clean

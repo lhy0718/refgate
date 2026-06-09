@@ -39,13 +39,18 @@ the executable verification engine.
 
 1. Identify the manuscript `.tex` file and bibliography `.bib` file.
 2. Run `paper-audit` as the first pass for ordinary paper repositories.
-3. Read `ok`, `blocking_issues`, `warnings`, and `next_actions` from JSON
-   output before editing bibliography or claim artifacts.
+3. Read `ok`, `blocking_issues`, `warnings`,
+   `accepted_provenance_notes`, and `next_actions` from JSON output before
+   editing bibliography or claim artifacts.
 4. Execute only deterministic follow-up commands that are allowed by the user's
    request and action metadata. Network work requires explicit opt-in.
 5. If a command returns `ok=false`, report the blocker and continue the
    correction loop only when the next action is safe and scoped.
-6. Do not treat fixture-only tests as proof that a real paper's references or
+6. Treat `warnings` as unresolved review work. Treat
+   `accepted_provenance_notes` as verified provenance records, such as reviewed
+   arXiv fallback or reviewed DOI absence; do not ask the user to "fix" them
+   unless they want a fresh live official-record refresh.
+7. Do not treat fixture-only tests as proof that a real paper's references or
    claims have been externally verified.
 
 ## Generic Paper Bootstrap

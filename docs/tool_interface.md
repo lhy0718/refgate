@@ -51,9 +51,17 @@ Every JSON command should return or embed:
   "data": {},
   "blocking_issues": [],
   "warnings": [],
+  "accepted_provenance_notes": [],
   "next_actions": []
 }
 ```
+
+`warnings` are unresolved review items that still need attention. Verified
+provenance notes are separate: commands such as `audit-bib`, `audit`, and
+`paper-audit` may return `accepted_provenance_notes` for reviewed arXiv
+fallbacks or reviewed DOI absence recorded in the lockfile. Agents should
+report those notes as provenance evidence, not as work items, unless the user
+asks for a fresh live official-record refresh.
 
 For `paper-audit`, `next_actions` is actionable rather than decorative. It may
 include commands such as `resolver-assist`, a rerun with `--source-dir`, claim
@@ -97,7 +105,8 @@ Skill-level agent rules should decide when to call these commands:
 
 - do not edit `.bib` when `ok=false`;
 - do not hand off bibliography artifacts while blocking issues remain;
-- treat warnings as reportable review items;
+- treat warnings as unresolved review items;
+- treat accepted provenance notes as verified evidence records, not blockers;
 - keep lockfile and Markdown report as the persistent evidence layer.
 
 Current CLI coverage:
