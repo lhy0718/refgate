@@ -71,3 +71,22 @@ def test_generate_claim_stubs_keeps_serial_list_tail_with_final_conjunction():
 
     assert len(stubs) == 1
     assert stubs[0].claim_text == "The FAIR principles emphasize findability, accessibility, interoperability, and reuse of digital assets"
+
+
+def test_generate_claim_stubs_does_not_prefix_headings_to_first_citation_sentence():
+    tex_text = (
+        "\\section{Background}\n"
+        "ReAct interleaves reasoning traces with task actions \\cite{yao2023react}.\n"
+        "\\subsection{State-Diff and Productivity-Agent Evaluation}\n"
+        "ReAct augments language models with an action space \\cite{yao2023react}.\n"
+        "\\paragraph{Least Privilege, Delegation, and Authorization Defenses} "
+        "AuthBench evaluates file-level permission policies \\cite{yan2026authbench}.\n"
+    )
+
+    stubs = generate_claim_stubs(tex_text)
+
+    assert [stub.claim_text for stub in stubs] == [
+        "ReAct interleaves reasoning traces with task actions",
+        "ReAct augments language models with an action space",
+        "AuthBench evaluates file-level permission policies",
+    ]

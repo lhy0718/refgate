@@ -484,6 +484,92 @@ def test_cli_paper_audit_can_build_source_map_from_citation_key_files(tmp_path, 
     assert any(action["code"] == "REVIEW_CLAIM_EVIDENCE" for action in second_payload["next_actions"])
 
 
+def test_cli_paper_audit_external_source_map_output_keeps_sources_readable(tmp_path, capsys):
+    project_dir = tmp_path / "project"
+    external_dir = tmp_path / "external-output"
+    source_dir = project_dir / "paper" / ".refgate" / "sources"
+    external_dir.mkdir(parents=True)
+    source_dir.mkdir(parents=True)
+    tex = project_dir / "paper" / "paper.tex"
+    bib = project_dir / "paper" / "references.bib"
+    lock = project_dir / "paper" / "refgate.lock.json"
+    claims = external_dir / "refgate_claims.tsv"
+    report = external_dir / "refgate_audit.md"
+    queries = external_dir / "resolver_queries.json"
+    claim_review = external_dir / "refgate_claim_review.md"
+    source_map = external_dir / "source_map.tsv"
+    source_text = source_dir / "debenedetti2024agentdojo.txt"
+    tex.parent.mkdir(parents=True, exist_ok=True)
+    tex.write_text((FIXTURES / "manuscript.tex").read_text(encoding="utf-8"), encoding="utf-8")
+    bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
+    lock.write_text((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8"), encoding="utf-8")
+    claims.write_text(
+        "claim_id\tmanuscript_location\tsource_file\tclaim_text\tcitation_key\tsource_location\tquote_or_evidence\tevidence_kind\tstatus\tnotes\tclaim_type\timportance\n"
+        "claim-0001\tpaper.tex:line 2\tpaper.tex\tAgentDojo evaluates prompt injection attacks and defenses for tool-using agents\tdebenedetti2024agentdojo\tsources/debenedetti2024agentdojo.txt: page 1\tAgentDojo evaluates prompt injection attacks and defenses for tool-using agents\tsource_text\tchecked\t\trelated_work\tnormal\n",
+        encoding="utf-8",
+    )
+    source_text.write_text(
+        "[page 1]\n"
+        "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents\n"
+        "Edoardo Debenedetti\n\n"
+        "Abstract\n"
+        "AgentDojo evaluates prompt injection attacks and defenses for tool-using agents.\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "paper-audit",
+            "--tex",
+            str(tex),
+            "--bib",
+            str(bib),
+            "--lock",
+            str(lock),
+            "--claims",
+            str(claims),
+            "--report",
+            str(report),
+            "--resolver-output",
+            str(queries),
+            "--source-dir",
+            str(source_dir),
+            "--source-map-output",
+            str(source_map),
+            "--claim-review-output",
+            str(claim_review),
+            "--submission",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    source_map_text = source_map.read_text(encoding="utf-8")
+    report_text = report.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["data"]["source_map"]["source_count"] == 1
+    assert str(source_text.resolve(strict=False)) in source_map_text
+    assert "sources/debenedetti2024agentdojo.txt" in source_map_text
+    assert "No claim-source action required." in report_text
+    assert "Keep mapped claims blocked" not in report_text
+
+    title_exit = main(
+        [
+            "check-source-titles",
+            "--lock",
+            str(lock),
+            "--source-map",
+            str(source_map),
+            "--json",
+        ]
+    )
+    title_payload = json.loads(capsys.readouterr().out)
+    assert title_exit == 0
+    assert title_payload["ok"] is True
+    assert title_payload["data"]["checked"] == 1
+
+
 def test_cli_paper_audit_claim_review_summarizes_no_match_sources(tmp_path, capsys):
     tex = tmp_path / "paper.tex"
     bib = tmp_path / "references.bib"

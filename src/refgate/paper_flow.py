@@ -170,6 +170,41 @@ def _default_source_map_output(claims_path: Path) -> Path:
     return claims_path.with_name(f"{claims_path.stem}_source_map.tsv")
 
 
+def _path_is_relative_to(path: Path, other: Path) -> bool:
+    try:
+        path.relative_to(other)
+        return True
+    except ValueError:
+        return False
+
+
+def _source_map_should_use_relative_path(source_root: Path, output_parent: Path) -> bool:
+    source_container = source_root.parent
+    return (
+        output_parent == source_container
+        or _path_is_relative_to(output_parent, source_container)
+        or _path_is_relative_to(source_container, output_parent)
+    )
+
+
+def _source_map_source_text(path: Path, *, source_root: Path, output_target: Path) -> str:
+    source_path = path.resolve(strict=False)
+    source_root_resolved = source_root.resolve(strict=False)
+    output_parent = output_target.parent.resolve(strict=False)
+    if _source_map_should_use_relative_path(source_root_resolved, output_parent):
+        return os.path.relpath(source_path, output_parent)
+    return str(source_path)
+
+
+def _source_map_source_label(path: Path, *, source_root: Path) -> str:
+    source_path = path.resolve(strict=False)
+    source_container = source_root.resolve(strict=False).parent
+    try:
+        return str(source_path.relative_to(source_container))
+    except ValueError:
+        return path.name
+
+
 def build_source_map_from_dir(
     *,
     source_dir: str | Path,
@@ -188,12 +223,13 @@ def build_source_map_from_dir(
             continue
         if path.stem not in citation_key_set:
             continue
-        relative_source = os.path.relpath(path, output_target.parent)
+        source_text = _source_map_source_text(path, source_root=source_root, output_target=output_target)
+        source_label = _source_map_source_label(path, source_root=source_root)
         rows.append(
             {
                 "citation_key": path.stem,
-                "source_text": relative_source,
-                "source_label": relative_source,
+                "source_text": source_text,
+                "source_label": source_label,
                 "evidence_kind": "source_text",
             }
         )
@@ -407,9 +443,14 @@ def render_claim_source_check_section(claim_source_check: dict[str, Any] | None)
         [
             "### Next Action",
             "",
-            "- Keep mapped claims blocked until source evidence is reviewed and imported with `import-review`.",
         ]
     )
+    if blocking_issues or missing_source_keys or no_match_claims:
+        lines.append("- Keep mapped claims blocked until source evidence is reviewed and imported with `import-review`.")
+    elif suggestions:
+        lines.append("- Review evidence suggestions and import a checked review only after direct source review.")
+    else:
+        lines.append("- No claim-source action required.")
     return "\n".join(lines).rstrip() + "\n"
 
 

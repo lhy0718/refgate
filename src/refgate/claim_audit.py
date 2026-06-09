@@ -36,6 +36,11 @@ CLAIM_COLUMNS = [
     "importance",
 ]
 
+HEADING_COMMAND_RE = re.compile(
+    r"\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph)"
+    r"\*?(?:\[[^\]]*\])?\{[^{}]*\}"
+)
+
 STOP_TERMS = {
     "about",
     "after",
@@ -125,7 +130,8 @@ def extract_citation_keys(tex_text: str) -> set[str]:
 
 def _strip_tex_commands(text: str) -> str:
     text = re.sub(r"%.*", "", text)
-    text = re.sub(r"\\(section|subsection|paragraph|textbf|emph)\*?(?:\[[^\]]*\])?\{([^{}]*)\}", r"\2", text)
+    text = HEADING_COMMAND_RE.sub(" ", text)
+    text = re.sub(r"\\(textbf|emph)\*?(?:\[[^\]]*\])?\{([^{}]*)\}", r"\2", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -147,6 +153,11 @@ def _paragraph_spans(tex_text: str) -> list[tuple[str, list[int]]]:
         if not line:
             flush()
             continue
+        if HEADING_COMMAND_RE.search(line):
+            flush()
+            line = HEADING_COMMAND_RE.sub(" ", line).strip()
+            if not line:
+                continue
         if text_parts:
             text_parts.append(" ")
             line_map.append(line_number)
