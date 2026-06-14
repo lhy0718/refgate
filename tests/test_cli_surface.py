@@ -93,6 +93,56 @@ def test_cli_resolver_assist_writes_query_work_items(tmp_path, capsys):
     assert saved["work_items"][0]["source_commands"][0]["source"] == "neurips"
 
 
+def test_cli_resolver_assist_prefers_openreview_for_iclr_booktitle_without_url(tmp_path, capsys):
+    bib = tmp_path / "references.bib"
+    lock_output = tmp_path / "refgate.lock.json"
+    query_output = tmp_path / "refgate_queries.json"
+    bib.write_text(
+        """@inproceedings{huang2026qerl,
+  title = {Qe{RL}: Beyond Efficiency - Quantization-enhanced Reinforcement Learning for {LLM}s},
+  author = {Wei Huang and Yi Ge and Shuai Yang},
+  booktitle = {The 14th International Conference on Learning Representations},
+  year = {2026}
+}
+""",
+        encoding="utf-8",
+    )
+    main(["bootstrap-lock", "--bib", str(bib), "--output", str(lock_output), "--json"])
+    capsys.readouterr()
+
+    exit_code = main(["resolver-assist", "--lock", str(lock_output), "--output", str(query_output), "--json"])
+
+    saved = json.loads(query_output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert saved["work_items"][0]["recommended_sources"][:2] == ["openreview", "iclr"]
+    assert saved["work_items"][0]["source_commands"][0]["source"] == "openreview"
+
+
+def test_cli_resolver_assist_prefers_crossref_for_ieee_proceedings_without_doi_or_url(tmp_path, capsys):
+    bib = tmp_path / "references.bib"
+    lock_output = tmp_path / "refgate.lock.json"
+    query_output = tmp_path / "refgate_queries.json"
+    bib.write_text(
+        """@inproceedings{jiang2026sparsity,
+  title = {Sparsity Induction for Accurate Post-Training Pruning of Large Language Models},
+  author = {Minhao Jiang and Zhikai Li and Xuewen Liu},
+  booktitle = {2026 IEEE International Conference on Acoustics, Speech and Signal Processing},
+  year = {2026}
+}
+""",
+        encoding="utf-8",
+    )
+    main(["bootstrap-lock", "--bib", str(bib), "--output", str(lock_output), "--json"])
+    capsys.readouterr()
+
+    exit_code = main(["resolver-assist", "--lock", str(lock_output), "--output", str(query_output), "--json"])
+
+    saved = json.loads(query_output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert saved["work_items"][0]["recommended_sources"][:2] == ["crossref", "ieee"]
+    assert saved["work_items"][0]["source_commands"][0]["source"] == "crossref"
+
+
 def test_cli_paper_audit_bootstraps_common_tex_bib_repo(tmp_path, capsys):
     tex = tmp_path / "paper.tex"
     bib = tmp_path / "references.bib"

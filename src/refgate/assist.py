@@ -49,13 +49,22 @@ def recommended_sources(entry: LockEntry) -> list[str]:
     url = str(record.get("url") or "").lower()
     source_text = f"{venue} {url}"
     sources: list[str] = []
+
+    def add_source(source: str) -> None:
+        if source not in sources:
+            sources.append(source)
+
     if record.get("doi"):
-        sources.append("crossref")
+        add_source("crossref")
+    if ("learning representations" in source_text or "iclr" in source_text) and "proceedings.iclr.cc" not in url:
+        add_source("openreview")
+    if ("ieee" in source_text or "icassp" in source_text) and not record.get("doi") and not url:
+        add_source("crossref")
     for source, hints in VENUE_SOURCE_HINTS:
         if any(hint in source_text for hint in hints):
-            sources.append(source)
+            add_source(source)
     if record.get("arxiv_id") or not sources:
-        sources.append("arxiv")
+        add_source("arxiv")
     for fallback in ["openalex", "semantic_scholar"]:
         if fallback not in sources:
             sources.append(fallback)

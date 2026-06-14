@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from refgate.adapters.venues import ADAPTERS, OpenReviewAdapter, PmlrAdapter, candidate_from_venue_html
@@ -62,6 +63,194 @@ def test_openreview_adapter_reads_embedded_forum_note_metadata_without_marking_o
     assert candidate.arxiv_id == "1412.6980"
     assert candidate.bibtex_url is None
     assert candidate.raw["embedded_bibtex_present"] is True
+
+
+def test_openreview_adapter_discovers_forum_id_through_api():
+    def fake_fetch(url):
+        assert url == "https://api2.openreview.net/notes?id=lqjQs2lVNm"
+        return json.dumps(
+            {
+                "notes": [
+                    {
+                        "id": "lqjQs2lVNm",
+                        "forum": "lqjQs2lVNm",
+                        "content": {
+                            "title": {"value": "Learning Semi-Structured Sparsity for LLMs via Shared and Context-Aware Hypernetwork"},
+                            "authors": {"value": ["Lu Sun", "Jun Sakuma"]},
+                            "venue": {"value": "ICLR 2026 Poster"},
+                            "venueid": {"value": "ICLR.cc/2026/Conference"},
+                            "_bibtex": {
+                                "value": "@inproceedings{sun2026learning,\n"
+                                "title={Learning Semi-Structured Sparsity for {LLM}s via Shared and Context-Aware Hypernetwork},\n"
+                                "author={Lu Sun and Jun Sakuma},\n"
+                                "booktitle={The Fourteenth International Conference on Learning Representations},\n"
+                                "year={2026},\n"
+                                "url={https://openreview.net/forum?id=lqjQs2lVNm}\n}"
+                            },
+                        },
+                    }
+                ]
+            }
+        )
+
+    candidates = OpenReviewAdapter(fetcher=fake_fetch).discover(
+        PaperQuery(
+            query_id="sun2026learning",
+            title="Learning Semi-Structured Sparsity for LLMs via Shared and Context-Aware Hypernetwork",
+            year=2026,
+            preferred_venues=["https://openreview.net/forum?id=lqjQs2lVNm"],
+        )
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].url == "https://openreview.net/forum?id=lqjQs2lVNm"
+    assert candidates[0].venue == "ICLR 2026 Poster"
+    assert candidates[0].authors == ["Lu Sun", "Jun Sakuma"]
+    assert candidates[0].year == 2026
+    assert candidates[0].bibtex_url is None
+
+
+def test_openreview_adapter_discovers_iclr_venue_records_by_title():
+    requested_urls = []
+
+    def fake_fetch(url):
+        requested_urls.append(url)
+        if "content.venueid=ICLR.cc%2F2026%2FConference" in url:
+            return json.dumps(
+                {
+                    "notes": [
+                        {
+                            "id": "other",
+                            "forum": "other",
+                            "content": {
+                                "title": {"value": "An Unrelated ICLR Paper"},
+                                "authors": {"value": ["Ada Smith"]},
+                                "venue": {"value": "ICLR 2026 Poster"},
+                                "_bibtex": {"value": "@inproceedings{other, year={2026}}"},
+                            },
+                        },
+                        {
+                            "id": "lqjQs2lVNm",
+                            "forum": "lqjQs2lVNm",
+                            "content": {
+                                "title": {"value": "Learning Semi-Structured Sparsity for LLMs via Shared and Context-Aware Hypernetwork"},
+                                "authors": {"value": ["Lu Sun", "Jun Sakuma"]},
+                                "venue": {"value": "ICLR 2026 Poster"},
+                                "venueid": {"value": "ICLR.cc/2026/Conference"},
+                                "_bibtex": {"value": "@inproceedings{sun2026learning, year={2026}}"},
+                            },
+                        },
+                    ]
+                }
+            )
+        return json.dumps({"notes": []})
+
+    candidates = OpenReviewAdapter(fetcher=fake_fetch).discover(
+        PaperQuery(
+            query_id="sun2026learning",
+            title="Learning Semi-Structured Sparsity for LLMs via Shared and Context-Aware Hypernetwork",
+            year=2026,
+            preferred_venues=["The Fourteenth International Conference on Learning Representations"],
+        )
+    )
+
+    assert any("content.venueid=ICLR.cc%2F2026%2FConference" in url for url in requested_urls)
+    assert [candidate.url for candidate in candidates] == ["https://openreview.net/forum?id=lqjQs2lVNm"]
+
+
+def test_openreview_adapter_paginates_venue_records_until_title_matches():
+    requested_urls = []
+
+    def fake_fetch(url):
+        requested_urls.append(url)
+        if "offset=0" in url:
+            return json.dumps(
+                {
+                    "count": 1001,
+                    "notes": [
+                        {
+                            "id": "other",
+                            "forum": "other",
+                            "content": {
+                                "title": {"value": "An Unrelated Poster"},
+                                "authors": {"value": ["Ada Smith"]},
+                                "venue": {"value": "ICLR 2026 Poster"},
+                                "_bibtex": {"value": "@inproceedings{other, year={2026}}"},
+                            },
+                        }
+                    ]
+                    * 1000,
+                }
+            )
+        if "offset=1000" in url:
+            return json.dumps(
+                {
+                    "count": 1001,
+                    "notes": [
+                        {
+                            "id": "lqjQs2lVNm",
+                            "forum": "lqjQs2lVNm",
+                            "content": {
+                                "title": {"value": "Learning Semi-Structured Sparsity for LLMs via Shared and Context-Aware Hypernetwork"},
+                                "authors": {"value": ["Lu Sun", "Jun Sakuma"]},
+                                "venue": {"value": "ICLR 2026 Poster"},
+                                "_bibtex": {"value": "@inproceedings{sun2026learning, year={2026}}"},
+                            },
+                        }
+                    ],
+                }
+            )
+        return json.dumps({"notes": []})
+
+    candidates = OpenReviewAdapter(fetcher=fake_fetch).discover(
+        PaperQuery(
+            query_id="sun2026learning",
+            title="Learning Semi-Structured Sparsity for LLMs via Shared and Context-Aware Hypernetwork",
+            year=2026,
+            preferred_venues=["ICLR"],
+        )
+    )
+
+    assert any("offset=1000" in url for url in requested_urls)
+    assert [candidate.url for candidate in candidates] == ["https://openreview.net/forum?id=lqjQs2lVNm"]
+
+
+def test_openreview_adapter_tries_neurips_compression_workshop_for_compression_titles():
+    requested_urls = []
+
+    def fake_fetch(url):
+        requested_urls.append(url)
+        if "content.venue=Compression+Workshop+%40+NeurIPS+2024" not in url:
+            return json.dumps({"notes": []})
+        return json.dumps(
+            {
+                "notes": [
+                    {
+                        "id": "Ikbfl5T5Y4",
+                        "forum": "Ikbfl5T5Y4",
+                        "content": {
+                            "title": {"value": "Large Language Model Compression with Neural Architecture Search"},
+                            "authors": {"value": ["Rhea Sanjay Sukthanker", "Benedikt Staffler", "Frank Hutter", "Aaron Klein"]},
+                            "venue": {"value": "Compression Workshop @ NeurIPS 2024"},
+                            "venueid": {"value": "NeurIPS.cc/2024/Workshop/Compression"},
+                            "_bibtex": {"value": "@inproceedings{sukthanker2024large, year={2024}}"},
+                        },
+                    }
+                ]
+            }
+        )
+
+    candidates = OpenReviewAdapter(fetcher=fake_fetch).discover(
+        PaperQuery(
+            query_id="sukthanker2024large",
+            title="Large Language Model Compression with Neural Architecture Search",
+            year=2024,
+            preferred_venues=["Proceedings of the 38th International Conference on Neural Information Processing Systems"],
+        )
+    )
+
+    assert any("Compression+Workshop+%40+NeurIPS+2024" in url for url in requested_urls)
+    assert [candidate.url for candidate in candidates] == ["https://openreview.net/forum?id=Ikbfl5T5Y4"]
 
 
 def test_generic_official_html_unescapes_bibtex_anchor_href():

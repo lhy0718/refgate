@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
 from html import unescape
-from urllib.parse import quote, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 from refgate.models import AuthorityRecord, BibtexRecord, CandidateRecord, PaperQuery
 from refgate.resolver import normalize_title
@@ -252,12 +253,156 @@ class OpenReviewAdapter(OfficialHtmlAdapter):
     venue_label = "OpenReview"
     url_domains = ("openreview.net",)
 
+    def discover(self, query: PaperQuery) -> list[CandidateRecord]:
+        candidates: list[CandidateRecord] = []
+        seen_urls: set[str] = set()
+
+        for value in query.preferred_venues:
+            forum_id = _openreview_forum_id(value)
+            if forum_id:
+                candidate = self._candidate_from_api_id(forum_id)
+                if candidate and candidate.url not in seen_urls:
+                    candidates.append(candidate)
+                    seen_urls.add(candidate.url or "")
+
+        for venue_query in _openreview_venue_queries(query):
+            matched = False
+            for candidate in self._candidates_from_api_query(venue_query, match_query=query):
+                if candidate.url not in seen_urls:
+                    candidates.append(candidate)
+                    seen_urls.add(candidate.url or "")
+                    matched = True
+            if matched:
+                return candidates
+
+        if candidates:
+            return candidates
+        return super().discover(query)
+
     def candidate_from_html(self, url: str, html: str) -> CandidateRecord:
         candidate = super().candidate_from_html(url, html)
         candidate.bibtex_url = None
         candidate.raw["official_bibtex_status"] = "not_discovered"
         _fill_openreview_embedded_metadata(candidate, html)
         return candidate
+
+    def _candidate_from_api_id(self, forum_id: str) -> CandidateRecord | None:
+        payload = self._fetch_api({"id": forum_id})
+        notes = payload.get("notes") or []
+        if not notes:
+            return None
+        return _openreview_candidate_from_note(notes[0])
+
+    def _candidates_from_api_query(self, params: dict[str, str | int], *, match_query: PaperQuery | None = None) -> list[CandidateRecord]:
+        limit = int(params.get("limit", 1000))
+        max_pages = int(params.get("_max_pages", 5))
+        api_params = {key: value for key, value in params.items() if not str(key).startswith("_")}
+        candidates: list[CandidateRecord] = []
+        for offset in range(0, limit * max_pages, limit):
+            page_params = {**api_params, "offset": offset}
+            payload = self._fetch_api(page_params)
+            notes = payload.get("notes") or []
+            page_candidates = [_openreview_candidate_from_note(note) for note in notes]
+            if match_query is not None:
+                matches = [candidate for candidate in page_candidates if _candidate_matches_openreview_query(candidate, match_query)]
+                if matches:
+                    return matches
+            else:
+                candidates.extend(page_candidates)
+            count = int(payload.get("count") or len(notes))
+            if len(notes) < limit or offset + limit >= count:
+                break
+        return candidates
+
+    def _fetch_api(self, params: dict[str, str | int]) -> dict:
+        url = "https://api2.openreview.net/notes?" + urlencode(params)
+        return json.loads(self.fetcher(url))
+
+
+def _openreview_forum_id(value: str) -> str | None:
+    parsed = urlparse(value)
+    if parsed.netloc.lower().endswith("openreview.net"):
+        query_id = parse_qs(parsed.query).get("id")
+        if query_id and query_id[0]:
+            return query_id[0]
+    if re.fullmatch(r"[A-Za-z0-9_-]{8,16}", value.strip()):
+        return value.strip()
+    return None
+
+
+def _openreview_field_value(content: dict, field: str):
+    value = content.get(field)
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
+
+
+def _openreview_candidate_from_note(note: dict) -> CandidateRecord:
+    content = note.get("content") or {}
+    title = str(_openreview_field_value(content, "title") or "")
+    authors_value = _openreview_field_value(content, "authors") or []
+    authors = [str(author) for author in authors_value] if isinstance(authors_value, list) else []
+    venue = _openreview_field_value(content, "venue") or _openreview_field_value(content, "venueid") or "OpenReview"
+    bibtex = str(_openreview_field_value(content, "_bibtex") or "")
+    year_match = re.search(r"\byear\s*=\s*\{?(\d{4})", bibtex, flags=re.IGNORECASE) or re.search(r"\b(20\d{2})\b", str(venue))
+    forum_id = note.get("forum") or note.get("id")
+    url = f"https://openreview.net/forum?id={forum_id}" if forum_id else None
+    candidate = CandidateRecord(
+        source="openreview",
+        title=title,
+        authors=authors,
+        year=int(year_match.group(1)) if year_match else None,
+        venue=str(venue),
+        url=url,
+        is_official_record=True,
+        bibtex_url=None,
+        source_priority=2,
+        raw={
+            "metadata_source": "openreview_api",
+            "authority_role": "final_authority",
+            "official_bibtex_status": "not_discovered",
+            "openreview_note_id": note.get("id"),
+            "openreview_venueid": _openreview_field_value(content, "venueid"),
+        },
+    )
+    _fill_openreview_embedded_metadata(candidate, json.dumps(note, ensure_ascii=False))
+    return candidate
+
+
+def _openreview_venue_queries(query: PaperQuery) -> list[dict[str, str | int]]:
+    if not query.title or not query.year:
+        return []
+    venue_text = " ".join(str(value).lower() for value in query.preferred_venues)
+    title_text = query.title.lower()
+    params: list[dict[str, str | int]] = []
+    if "learning representations" in venue_text or "iclr" in venue_text:
+        params.extend(
+            [
+                {"content.venueid": f"ICLR.cc/{query.year}/Conference", "limit": 1000},
+                {"content.venue": f"ICLR {query.year} Poster", "limit": 1000},
+            ]
+        )
+    if "neural information processing" in venue_text or "neurips" in venue_text:
+        if "compression" in title_text:
+            params.append({"content.venue": f"Compression Workshop @ NeurIPS {query.year}", "limit": 1000})
+        params.extend(
+            [
+                {"content.venue": f"NeurIPS {query.year} Workshop", "limit": 1000},
+                {"content.venue": f"NeurIPS {query.year} Poster", "limit": 1000},
+                {"content.venueid": f"NeurIPS.cc/{query.year}/Conference", "limit": 1000},
+            ]
+        )
+    if "tmlr" in venue_text or "transactions on machine learning research" in venue_text:
+        params.append({"content.venue": "Transactions on Machine Learning Research", "limit": 1000})
+    return params
+
+
+def _candidate_matches_openreview_query(candidate: CandidateRecord, query: PaperQuery) -> bool:
+    if normalize_title(candidate.title) != normalize_title(query.title):
+        return False
+    if query.year and candidate.year and int(query.year) != int(candidate.year):
+        return False
+    return True
 
 
 def _openreview_json_string(html: str, field: str) -> str | None:
