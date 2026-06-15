@@ -5,6 +5,7 @@ import json
 from refgate.audit import audit_bibliography, audit_bibliography_result
 from refgate.bibtex import parse_bibtex_file
 from refgate.models import Lockfile
+from refgate.resolver import normalize_title
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -90,6 +91,57 @@ def test_verified_doi_missing_manual_fallback_becomes_accepted_provenance_note()
 
     assert not any(issue.code == "DOI_MISSING" for issue in result.issues)
     assert any(issue.code == "DOI_MISSING" for issue in result.accepted_provenance_notes)
+
+
+def test_reviewed_manual_fallback_with_blocked_official_endpoint_is_accepted_note():
+    entry = copy.deepcopy(_fixture_lock_data()["entries"][0])
+    entry["status"] = "verified_manual_fallback"
+    entry["authority"]["bibtex_url"] = "https://publisher.example/blocked-official.bib"
+    entry["bibtex"]["source_kind"] = "publisher_metadata_manual_normalized"
+    entry["bibtex"]["fallback_reason"] = "Reviewed official HTML; official BibTeX endpoint was blocked during automated fetch."
+    entry["bibtex"]["field_checks"]["doi"] = "checked"
+
+    result = audit_bibliography_result(_fixture_bib_text(extra_field="  doi = {10.5555/refgate.fixture},\n"), _lockfile_with_entry(entry), submission=True)
+
+    assert not any(issue.code == "OFFICIAL_EXPORT_NOT_USED" for issue in result.issues)
+    assert any(issue.code == "OFFICIAL_EXPORT_NOT_USED" for issue in result.accepted_provenance_notes)
+
+
+def test_unreasoned_manual_fallback_with_official_endpoint_stays_blocking():
+    entry = copy.deepcopy(_fixture_lock_data()["entries"][0])
+    entry["status"] = "verified_manual_fallback"
+    entry["authority"]["bibtex_url"] = "https://publisher.example/official.bib"
+    entry["bibtex"]["source_kind"] = "publisher_metadata_manual_normalized"
+    entry["bibtex"].pop("fallback_reason", None)
+    entry["bibtex"]["field_checks"]["doi"] = "checked"
+
+    result = audit_bibliography_result(_fixture_bib_text(extra_field="  doi = {10.5555/refgate.fixture},\n"), _lockfile_with_entry(entry), submission=True)
+
+    assert any(issue.code == "OFFICIAL_EXPORT_NOT_USED" and issue.severity == "blocking" for issue in result.issues)
+    assert any(issue.code == "FALLBACK_REASON_MISSING" and issue.severity == "blocking" for issue in result.issues)
+
+
+def test_author_match_allows_bibtex_last_first_full_given_against_short_given():
+    entry = copy.deepcopy(_fixture_lock_data()["entries"][0])
+    entry["record"]["authors"] = ["Yoshi Suhara", "Xiaolan Wang"]
+    bib_text = (
+        "@inproceedings{debenedetti2024agentdojo,\n"
+        "  title = {AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents},\n"
+        "  author = {Suhara, Yoshihiko and Wang, Xiaolan},\n"
+        "  booktitle = {Advances in Neural Information Processing Systems},\n"
+        "  year = {2024},\n"
+        "  doi = {10.5555/refgate.fixture},\n"
+        "  url = {https://proceedings.neurips.cc/paper_files/paper/2024/hash/example-Abstract-Conference.html}\n"
+        "}\n"
+    )
+
+    result = audit_bibliography_result(bib_text, _lockfile_with_entry(entry), submission=True)
+
+    assert not any(issue.code == "AUTHOR_MISMATCH" for issue in result.issues)
+
+
+def test_title_normalization_matches_tex_apostrophe_and_curly_apostrophe():
+    assert normalize_title("Can {LLM}s Ground when they (Don{'}t) Know") == normalize_title("Can LLMs Ground when they (Don’t) Know")
 
 
 def test_unverified_arxiv_fallback_remains_unresolved_warning():

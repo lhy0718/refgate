@@ -136,7 +136,14 @@ def official_candidate(
 ) -> CandidateRecord:
     title = meta_content(html, title_meta) or meta_content(html, "citation_title") or meta_content(html, "og:title") or ""
     authors = meta_contents(html, author_meta)
-    year_text = meta_content(html, year_meta) or meta_content(html, "citation_publication_date") or ""
+    year_text = (
+        meta_content(html, year_meta)
+        or meta_content(html, "citation_publication_date")
+        or meta_content(html, "citation_date")
+        or meta_content(html, "dc.date")
+        or meta_content(html, "dc.date.created")
+        or ""
+    )
     year_match = re.search(r"\d{4}", year_text)
     endpoint = find_bibtex_endpoint(record_url, html)
     doi = _doi_from_meta(html)

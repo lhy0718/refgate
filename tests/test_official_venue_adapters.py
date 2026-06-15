@@ -1,6 +1,8 @@
 import json
+import gzip
 from pathlib import Path
 
+from refgate.adapters import base
 from refgate.adapters.venues import ADAPTERS, OpenReviewAdapter, PmlrAdapter, candidate_from_venue_html
 from refgate.models import PaperQuery
 
@@ -19,6 +21,54 @@ def test_generic_official_venue_adapter_finds_bibtex_endpoint():
     assert candidate.is_official_record is True
     assert candidate.bibtex_url == "https://proceedings.mlr.press/v999/fixture-learning.bib"
     assert endpoints[0].is_official is True
+
+
+def test_default_fetcher_decodes_gzip_response(monkeypatch):
+    class Response:
+        headers = {"Content-Encoding": "gzip"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return gzip.compress(b"<html>compressed official record</html>")
+
+    def fake_urlopen(request, timeout):
+        assert timeout == 30
+        return Response()
+
+    monkeypatch.setattr(base, "urlopen", fake_urlopen)
+
+    assert base.default_fetcher("https://ojs.aaai.org/index.php/AAAI/article/view/28853") == "<html>compressed official record</html>"
+
+
+def test_aaai_adapter_reads_ojs_citation_date_and_bibtex_download_link():
+    html = """
+    <html><head>
+      <meta name="citation_title" content="Unravelling Expressive Delegations: Complexity and Normative Analysis"/>
+      <meta name="citation_author" content="Giannis Tyrovolas"/>
+      <meta name="citation_author" content="Edith Elkind"/>
+      <meta name="citation_date" content="2024/03/24"/>
+      <meta name="DC.Identifier.DOI" content="10.1609/aaai.v38i9.28853"/>
+      <meta name="citation_journal_title" content="Proceedings of the AAAI Conference on Artificial Intelligence"/>
+    </head><body>
+      <a href="https://ojs.aaai.org/index.php/AAAI/citationstylelanguage/download/bibtex?submissionId=28853&amp;publicationId=27137">
+        BibTeX
+      </a>
+    </body></html>
+    """
+
+    candidate = candidate_from_venue_html("aaai", "https://ojs.aaai.org/index.php/AAAI/article/view/28853", html)
+
+    assert candidate.title == "Unravelling Expressive Delegations: Complexity and Normative Analysis"
+    assert candidate.authors == ["Giannis Tyrovolas", "Edith Elkind"]
+    assert candidate.year == 2024
+    assert candidate.doi == "10.1609/aaai.v38i9.28853"
+    assert candidate.venue == "Proceedings of the AAAI Conference on Artificial Intelligence"
+    assert candidate.bibtex_url == "https://ojs.aaai.org/index.php/AAAI/citationstylelanguage/download/bibtex?submissionId=28853&publicationId=27137"
 
 
 def test_pmlr_adapter_reads_inline_bibtex_export():

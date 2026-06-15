@@ -9,6 +9,7 @@ from .models import AuditIssue, AuthorityRecord, CandidateRecord, PaperQuery, Re
 def normalize_title(title: str) -> str:
     text = unicodedata.normalize("NFKC", title).lower().strip()
     text = re.sub(r"\\+([&%_$#{}])", r"\1", text)
+    text = text.replace("’", "'").replace("‘", "'")
     text = text.replace("{", "").replace("}", "")
     text = text.replace("‐", "-").replace("‑", "-").replace("–", "-").replace("—", "-")
     text = re.sub(r"\s+", " ", text)

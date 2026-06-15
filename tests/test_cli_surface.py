@@ -1603,3 +1603,69 @@ def test_cli_fetch_bibtex_merges_existing_lockfile(tmp_path, capsys):
     assert payload["data"]["lock_entry"]["citation_key"] == "smith-lee-2026-refgate"
     assert len(merged["entries"]) == 2
     assert any(entry["citation_key"] == "debenedetti2024agentdojo" for entry in merged["entries"])
+
+
+def test_cli_fetch_bibtex_rekeys_resolved_official_export_to_requested_citation_key(tmp_path, capsys):
+    lock_path = tmp_path / "refgate.lock.json"
+    lock_path.write_text(json.dumps({"schema_version": "refgate.lock.v1", "entries": []}), encoding="utf-8")
+    resolved_path = tmp_path / "resolved.json"
+    candidate = CandidateRecord(
+        source="acl",
+        title="Refgate Fixture: Official ACL Export",
+        authors=["Ada Smith"],
+        year=2026,
+        venue="ACL Anthology",
+        url="https://aclanthology.org/2026.acl-long.001/",
+        is_official_record=True,
+        bibtex_url="https://aclanthology.org/2026.acl-long.001.bib",
+        source_priority=1,
+    )
+    authority = AuthorityRecord(
+        source="acl",
+        record_url="https://aclanthology.org/2026.acl-long.001/",
+        record_type="conference_proceedings",
+        source_priority=1,
+        bibtex_url="https://aclanthology.org/2026.acl-long.001.bib",
+    )
+    resolved_path.write_text(
+        json.dumps(
+            {
+                "query_id": "seed_acl_fixture",
+                "decision": "selected",
+                "status": "verified_official_bibtex",
+                "authority": authority.to_dict(),
+                "resolver_score": 95,
+                "blocking_issues": [],
+                "warnings": [],
+                "decision_trace": ["fixture"],
+                "selected_candidate": candidate.to_dict(),
+                "ok": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "fetch-bibtex",
+            "--resolved",
+            str(resolved_path),
+            "--bibtex-file",
+            str(FIXTURES / "acl_official.bib"),
+            "--citation-key",
+            "seed_acl_fixture",
+            "--write-lock",
+            str(lock_path),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    merged = json.loads(lock_path.read_text(encoding="utf-8"))
+    entry = merged["entries"][0]
+    assert exit_code == 0
+    assert payload["data"]["lock_entry"]["citation_key"] == "seed_acl_fixture"
+    assert entry["citation_key"] == "seed_acl_fixture"
+    assert entry["bibtex"]["citation_key"] == "seed_acl_fixture"
+    assert entry["bibtex"]["field_checks"]["exported_citation_key"] == "smith-lee-2026-refgate"
+    assert entry["bibtex"]["canonical_text"].startswith("@inproceedings{seed_acl_fixture,")

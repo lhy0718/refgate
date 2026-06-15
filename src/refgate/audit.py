@@ -33,7 +33,31 @@ def _same_author_name(left: str, right: str) -> bool:
         return True
     left_parts = set(left_norm.split())
     right_parts = set(right_norm.split())
-    return bool(left_parts) and left_parts == right_parts
+    if bool(left_parts) and left_parts == right_parts:
+        return True
+    left_name = _author_name_parts(left)
+    right_name = _author_name_parts(right)
+    if left_name and right_name and left_name[1] == right_name[1]:
+        left_given = left_name[0]
+        right_given = right_name[0]
+        return bool(left_given and right_given) and (left_given[0] == right_given[0] or left_given.startswith(right_given) or right_given.startswith(left_given))
+    return False
+
+
+def _author_name_parts(value: str) -> tuple[str, str] | None:
+    if "," in value:
+        last, given = value.split(",", 1)
+    else:
+        parts = value.split()
+        if len(parts) < 2:
+            return None
+        given = " ".join(parts[:-1])
+        last = parts[-1]
+    given_norm = normalize_author(given)
+    last_norm = normalize_author(last)
+    if not given_norm or not last_norm:
+        return None
+    return given_norm, last_norm
 
 
 def _authority_source(lock_entry) -> str:
@@ -52,6 +76,10 @@ def _is_verified_arxiv_fallback(lock_entry, source_kind: str) -> bool:
         or _authority_source(lock_entry) == "arxiv"
         or "arxiv.org" in _authority_record_url(lock_entry)
     )
+
+
+def _has_reviewed_manual_fallback(lock_entry, source_kind: str) -> bool:
+    return source_kind in FALLBACK_SOURCE_KINDS and bool(str(lock_entry.bibtex.get("fallback_reason") or "").strip())
 
 
 def _has_verified_doi_absence(lock_entry, source_kind: str) -> bool:
@@ -111,15 +139,25 @@ def audit_bibliography_result(bib_text: str, lockfile: Lockfile, submission: boo
 
         official_url = lock_entry.authority.get("bibtex_url")
         if official_url and source_kind != "official_export":
-            issues.append(
-                AuditIssue(
-                    code="OFFICIAL_EXPORT_NOT_USED",
-                    message="Official BibTeX endpoint exists, but entry is not marked as official export.",
-                    severity="blocking",
-                    citation_key=citation_key,
-                    evidence=[official_url],
-                )
+            official_export_not_used = AuditIssue(
+                code="OFFICIAL_EXPORT_NOT_USED",
+                message="Official BibTeX endpoint exists, but entry is not marked as official export.",
+                severity="warning",
+                citation_key=citation_key,
+                evidence=[official_url],
             )
+            if _has_reviewed_manual_fallback(lock_entry, source_kind):
+                accepted_provenance_notes.append(official_export_not_used)
+            else:
+                issues.append(
+                    AuditIssue(
+                        code=official_export_not_used.code,
+                        message=official_export_not_used.message,
+                        severity="blocking",
+                        citation_key=citation_key,
+                        evidence=official_export_not_used.evidence,
+                    )
+                )
         if source_kind == "official_export":
             stored_hash = lock_entry.bibtex.get("normalized_sha256")
             current_raw = raw_entries.get(citation_key)

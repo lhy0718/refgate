@@ -387,7 +387,7 @@ def cmd_fetch_bibtex(args: argparse.Namespace) -> int:
                 selected_candidate=candidate,
                 decision_trace=["lock entry built from fetch-bibtex inputs"],
             )
-        lock_entry = build_lock_entry(decision, bibtex, fallback_reason=args.fallback_reason)
+        lock_entry = build_lock_entry(decision, bibtex, citation_key=args.citation_key, fallback_reason=args.fallback_reason)
         lockfile = merge_lock_entry(load_lockfile(args.write_lock), lock_entry)
         write_lockfile(lockfile, args.write_lock)
         data["lock_path"] = args.write_lock

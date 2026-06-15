@@ -2,15 +2,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal, Protocol
+import gzip
+import zlib
 from urllib.request import Request, urlopen
 
 from refgate.models import AuthorityRecord, BibtexRecord, CandidateRecord, PaperQuery
 
 
 def default_fetcher(url: str) -> str:
-    request = Request(url, headers={"User-Agent": "refgate/0.1"})
+    request = Request(url, headers={"User-Agent": "refgate/0.1", "Accept-Encoding": "gzip, deflate, identity"})
     with urlopen(request, timeout=30) as response:
-        return response.read().decode("utf-8", errors="replace")
+        body = response.read()
+        encoding = (response.headers.get("Content-Encoding") or "").lower()
+        if "gzip" in encoding or body.startswith(b"\x1f\x8b"):
+            body = gzip.decompress(body)
+        elif "deflate" in encoding:
+            body = zlib.decompress(body)
+        return body.decode("utf-8", errors="replace")
 
 
 @dataclass
