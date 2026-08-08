@@ -1,0 +1,21 @@
+{
+  "name": "refgate-local",
+  "owner": {
+    "name": "Refgate contributors",
+    "url": "https://github.com/lhy0718/refgate"
+  },
+  "plugins": [
+    {
+      "name": "refgate",
+      "source": "./plugins/refgate",
+      "description": "Gate BibTeX provenance and citation evidence with the Refgate CLI.",
+      "category": "research",
+      "keywords": [
+        "academic-writing",
+        "bibtex",
+        "citation-audit",
+        "reference-gate"
+      ]
+    }
+  ]
+}
