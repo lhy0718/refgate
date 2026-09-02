@@ -177,3 +177,97 @@ def test_sync_bibtex_points_manual_fallback_to_reviewed_bibtex_backfill(tmp_path
     assert exit_code == 1
     assert payload["next_actions"][0]["code"] == "BACKFILL_MANUAL_CANONICAL_BIBTEX"
     assert "REVIEWED_FALLBACK_BIBTEX_DIR" in payload["next_actions"][0]["command"]
+
+
+def test_sync_bibtex_semantic_noop_plan_and_output_are_consistent(tmp_path, capsys):
+    canonical = """@inproceedings{publisher-official-key,
+  title = {Café LLM Study},
+  author = {Doe, Jane and Smith, Ada},
+  booktitle = {Proceedings of the Fixture Conference},
+  year = {2026},
+  pages = {10--20},
+  doi = {10.1234/refgate.2026},
+  publisher = {ACM}
+}
+"""
+    manuscript = """% preserve exact manuscript bytes
+@INPROCEEDINGS{manuscript_local_key,
+  publisher = {Association for Computing Machinery},
+  doi = {https://doi.org/10.1234/REFGATE.2026},
+  pages = {10 - 20},
+  year = 2026,
+  booktitle = {Proceedings   of the Fixture Conference},
+  author = {Doe, Jane   and Smith, Ada},
+  title = {Café {LLM} Study}
+}
+"""
+    entry = _lock_entry("manuscript_local_key", canonical)
+    entry["short_title"] = "Café LLM Study"
+    entry["record"].update(
+        {
+            "title": "Café LLM Study",
+            "authors": ["Doe, Jane", "Smith, Ada"],
+            "year": 2026,
+            "doi": "10.1234/refgate.2026",
+        }
+    )
+    entry["bibtex"]["normalized_sha256"] = sha256_text(canonical)
+    lock = tmp_path / "refgate.lock.json"
+    bib = tmp_path / "references.bib"
+    output = tmp_path / "references.synced.bib"
+    lock.write_text(json.dumps({"schema_version": "refgate.lock.v1", "entries": [entry]}), encoding="utf-8")
+    bib.write_text(manuscript, encoding="utf-8")
+
+    audit_exit = main(
+        [
+            "audit-bib",
+            "--bib",
+            str(bib),
+            "--lock",
+            str(lock),
+            "--submission",
+            "--json",
+        ]
+    )
+    audit = json.loads(capsys.readouterr().out)
+    plan_exit = main(
+        [
+            "sync-bibtex",
+            "--bib",
+            str(bib),
+            "--lock",
+            str(lock),
+            "--citation-key",
+            "manuscript_local_key",
+            "--json",
+        ]
+    )
+    plan = json.loads(capsys.readouterr().out)
+    write_exit = main(
+        [
+            "sync-bibtex",
+            "--bib",
+            str(bib),
+            "--lock",
+            str(lock),
+            "--citation-key",
+            "manuscript_local_key",
+            "--output",
+            str(output),
+            "--json",
+        ]
+    )
+    written = json.loads(capsys.readouterr().out)
+
+    assert audit_exit == 0
+    assert not any(
+        issue.get("code") == "OFFICIAL_EXPORT_CONTENT_CHANGED"
+        for issue in [*audit.get("blocking_issues", []), *audit.get("warnings", [])]
+    )
+    assert plan_exit == 0
+    assert plan["data"]["change_count"] == 0
+    assert plan["data"]["actions"][0]["action"] == "unchanged"
+    assert plan["data"]["actions"][0]["reason"] == "bibliographic_metadata_equivalent"
+    assert write_exit == 0
+    assert written["data"]["change_count"] == 0
+    assert output.read_bytes() == bib.read_bytes()

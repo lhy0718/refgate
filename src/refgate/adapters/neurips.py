@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 from urllib.request import urlopen
+import re
 
 from refgate.models import AuthorityRecord, BibtexRecord, CandidateRecord, PaperQuery
 from refgate.resolver import normalize_title
@@ -17,7 +18,7 @@ def _url_fetcher(url: str) -> str:
 
 
 def candidate_from_neurips_html(url: str, html: str) -> CandidateRecord:
-    return official_candidate(
+    candidate = official_candidate(
         source="neurips",
         record_url=url,
         html=html,
@@ -26,6 +27,14 @@ def candidate_from_neurips_html(url: str, html: str) -> CandidateRecord:
         year_meta="citation_publication_date",
         venue="NeurIPS",
     )
+    year_match = re.search(r"/paper(?:_files)?/paper/(\d{4})/", url)
+    if year_match:
+        path_year = int(year_match.group(1))
+        if candidate.year != path_year:
+            candidate.raw["html_publication_year"] = candidate.year
+            candidate.raw["year_source"] = "neurips_record_path"
+            candidate.year = path_year
+    return candidate
 
 
 def neurips_record_url(url: str) -> str:

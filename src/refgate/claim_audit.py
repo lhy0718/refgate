@@ -518,7 +518,7 @@ def suggest_claim_evidence(
         note = row.get("notes", "").strip()
         suggestion_note = (
             f"Refgate suggested source text overlap score {score}, coverage {match['coverage']:.2f}; "
-            "human review required."
+            "source-evidence review required."
         )
         row["notes"] = f"{note} {suggestion_note}".strip() if note else suggestion_note
         updated += 1
@@ -606,7 +606,7 @@ def suggest_claim_evidence_bundle(
         note = row.get("notes", "").strip()
         suggestion_note = (
             f"Refgate source bundle overlap score {score}, coverage {best['coverage']:.2f}; "
-            "human review required."
+            "source-evidence review required."
         )
         row["notes"] = f"{note} {suggestion_note}".strip() if note else suggestion_note
         updated += 1

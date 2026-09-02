@@ -5,7 +5,12 @@ from pathlib import Path
 import re
 from typing import Any
 
-from .bibtex import parse_bibtex_entry, sha256_text
+from .bibtex import (
+    bibtex_entries_semantically_equal,
+    bibtex_semantic_sha256,
+    parse_bibtex_entry,
+    sha256_text,
+)
 from .lockfile import load_lockfile
 
 
@@ -139,15 +144,17 @@ def _sync_action(
         )
 
     current_hash = sha256_text(current_text.strip() + "\n")
-    if current_hash == canonical_hash:
+    if bibtex_entries_semantically_equal(current_text, canonical_text):
+        same_serialization = current_hash == canonical_hash
         return (
             {
                 "citation_key": citation_key,
                 "action": "unchanged",
-                "reason": "already_synced",
+                "reason": "already_synced" if same_serialization else "bibliographic_metadata_equivalent",
                 "status": lock_entry.status,
                 "source_kind": source_kind,
                 "canonical_sha256": canonical_hash,
+                "semantic_sha256": bibtex_semantic_sha256(canonical_text),
             },
             None,
         )
@@ -161,6 +168,8 @@ def _sync_action(
             "source_kind": source_kind,
             "current_sha256": current_hash,
             "canonical_sha256": canonical_hash,
+            "current_semantic_sha256": bibtex_semantic_sha256(current_text),
+            "canonical_semantic_sha256": bibtex_semantic_sha256(canonical_text),
         },
         canonical_text,
     )

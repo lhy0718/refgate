@@ -9,8 +9,8 @@ from typing import Any
 
 
 REFGATE_COMMAND_PREFIX = ("python", "-m", "refgate")
-NEXT_ACTIONS_SCHEMA_VERSION = "refgate.next_actions.v1"
-NEXT_ACTION_SUMMARY_SCHEMA_VERSION = "refgate.next_action_summary.v1"
+NEXT_ACTIONS_SCHEMA_VERSION = "refgate.next_actions.v2"
+NEXT_ACTION_SUMMARY_SCHEMA_VERSION = "refgate.next_action_summary.v2"
 COMMAND_PLACEHOLDERS = {
     "LOCK",
     "PAPER_BIB",
@@ -21,6 +21,8 @@ COMMAND_PLACEHOLDERS = {
     "OFFICIAL_BIBTEX_DIR",
     "OFFICIAL_HTML_DIR",
 }
+COMMAND_NETWORK_FLAGS = {"--live", "--live-scholar", "--live-official", "--fetch-official-bibtex"}
+COMMAND_WRITE_FLAGS = {"--write-lock", "--write-candidates", "--output-plan", "--write-run-log"}
 
 
 def load_next_actions(path: str | Path) -> list[dict[str, Any]]:
@@ -38,7 +40,7 @@ def _skip_reason(
     *,
     allow_network: bool,
     allow_writes: bool,
-    allow_human_review: bool,
+    allow_review: bool,
     command: str | None,
     command_field: str,
 ) -> str | None:
@@ -48,13 +50,31 @@ def _skip_reason(
         return "input_required"
     if command_field != "command" and action.get("missing_inputs") and not _input_options_ready(action.get("input_options", [])):
         return "input_required"
-    if action.get("network_required") and not allow_network:
+    if _effective_network_required(action, command) and not allow_network:
         return "network_required"
-    if action.get("writes_files") and not allow_writes:
+    if _effective_writes_files(action, command) and not allow_writes:
         return "writes_files"
-    if action.get("requires_human_review") and not allow_human_review:
-        return "requires_human_review"
+    if action.get("requires_review") and not allow_review:
+        return "requires_review"
     return None
+
+
+def _command_has_any_flag(command: str | None, flags: set[str]) -> bool:
+    if not command:
+        return False
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return False
+    return any(arg in flags or any(arg.startswith(f"{flag}=") for flag in flags) for arg in argv)
+
+
+def _effective_network_required(action: dict[str, Any], command: str | None) -> bool:
+    return bool(action.get("network_required")) or _command_has_any_flag(command, COMMAND_NETWORK_FLAGS)
+
+
+def _effective_writes_files(action: dict[str, Any], command: str | None) -> bool:
+    return bool(action.get("writes_files")) or _command_has_any_flag(command, COMMAND_WRITE_FLAGS)
 
 
 def _command_choices(action: dict[str, Any]) -> dict[str, str]:
@@ -119,6 +139,10 @@ def _agent_hint(item: dict[str, Any]) -> str:
         if item.get("skip_reason") == "network_required":
             return "Official BibTeX export is available; enable --allow-network only after live-network approval."
     if item.get("code") == "ADD_OFFICIAL_BIBTEX_FIXTURE":
+        guide = item.get("manual_official_bibtex_instructions") or {}
+        url = guide.get("official_bibtex_url") or guide.get("official_record_url") or item.get("official_bibtex_url")
+        if url:
+            return f"Open the official citation page or export URL ({url}), save its BibTeX using one listed filename, then rerun reference-check."
         return "Save the reviewed publisher BibTeX export using one of the official_bibtex_file_examples, then rerun reference-check."
     if item.get("code") == "ADD_OFFICIAL_HTML_FIXTURE":
         return "Save reviewed official record HTML using one of the fixture_html_file_examples, then rerun reference-check."
@@ -129,8 +153,8 @@ def _agent_hint(item: dict[str, Any]) -> str:
         return "Enable --allow-network only after explicit live-network approval."
     if reason == "writes_files":
         return "Enable --allow-writes only when file updates are intended."
-    if reason == "requires_human_review":
-        return "Enable --allow-human-review only after reviewed inputs or source evidence are available."
+    if reason == "requires_review":
+        return "Enable --allow-review only after reviewed inputs or source evidence are available."
     if reason == "input_required":
         missing = ", ".join(item.get("missing_inputs") or item.get("command_placeholders") or [])
         return f"Provide reviewed input paths before execution: {missing}." if missing else "Provide reviewed input paths before execution."
@@ -190,6 +214,7 @@ def _top_level_next_step(planned: list[dict[str, Any]]) -> dict[str, Any]:
             "action_summary": selected.get("action_summary"),
             "hint": selected.get("agent_hint"),
             "source_guidance": selected.get("source_guidance_summary", {}),
+            "manual_official_bibtex_instructions": selected.get("manual_official_bibtex_instructions"),
         }
     actionable = next((item for item in planned if item.get("command")), None)
     if actionable:
@@ -202,6 +227,7 @@ def _top_level_next_step(planned: list[dict[str, Any]]) -> dict[str, Any]:
             "skip_reason": actionable.get("skip_reason"),
             "hint": actionable.get("agent_hint"),
             "source_guidance": actionable.get("source_guidance_summary", {}),
+            "manual_official_bibtex_instructions": actionable.get("manual_official_bibtex_instructions"),
         }
     return {
         "status": "none",
@@ -215,7 +241,7 @@ def plan_next_actions(
     *,
     allow_network: bool = False,
     allow_writes: bool = False,
-    allow_human_review: bool = False,
+    allow_review: bool = False,
     max_actions: int | None = None,
     command_field: str = "command",
 ) -> list[dict[str, Any]]:
@@ -228,7 +254,7 @@ def plan_next_actions(
             action,
             allow_network=allow_network,
             allow_writes=allow_writes,
-            allow_human_review=allow_human_review,
+            allow_review=allow_review,
             command=command,
             command_field=command_field,
         )
@@ -243,9 +269,9 @@ def plan_next_actions(
                 "skip_reason": reason,
                 "code": action.get("code", ""),
                 "kind": action.get("kind", ""),
-                "requires_human_review": bool(action.get("requires_human_review")),
-                "writes_files": bool(action.get("writes_files")),
-                "network_required": bool(action.get("network_required")),
+                "requires_review": bool(action.get("requires_review")),
+                "writes_files": _effective_writes_files(action, command),
+                "network_required": _effective_network_required(action, command),
                 "command": command,
                 "command_field": command_field,
                 "available_command_fields": sorted(choices),
@@ -259,6 +285,7 @@ def plan_next_actions(
                 "official_bibtex_url": action.get("official_bibtex_url"),
                 "fixture_html_file_examples": action.get("fixture_html_file_examples", []),
                 "official_bibtex_file_examples": action.get("official_bibtex_file_examples", []),
+                "manual_official_bibtex_instructions": action.get("manual_official_bibtex_instructions"),
                 "preferred_input": action.get("preferred_input"),
                 "source_guidance_summary": _source_guidance_summary(action),
                 "action_summary": _action_summary(action),
@@ -310,7 +337,7 @@ def build_next_actions_result(
     input_label: str,
     allow_network: bool = False,
     allow_writes: bool = False,
-    allow_human_review: bool = False,
+    allow_review: bool = False,
     max_actions: int | None = None,
     command_field: str = "command",
     execute: bool = False,
@@ -319,7 +346,7 @@ def build_next_actions_result(
         actions,
         allow_network=allow_network,
         allow_writes=allow_writes,
-        allow_human_review=allow_human_review,
+        allow_review=allow_review,
         max_actions=max_actions,
         command_field=command_field,
     )
@@ -334,7 +361,7 @@ def build_next_actions_result(
         "gates": {
             "allow_network": allow_network,
             "allow_writes": allow_writes,
-            "allow_human_review": allow_human_review,
+            "allow_review": allow_review,
             "max_actions": max_actions,
             "command_field": command_field,
         },
@@ -352,7 +379,7 @@ def run_next_actions(
     *,
     allow_network: bool = False,
     allow_writes: bool = False,
-    allow_human_review: bool = False,
+    allow_review: bool = False,
     max_actions: int | None = None,
     command_field: str = "command",
     execute: bool = False,
@@ -363,7 +390,7 @@ def run_next_actions(
         input_label=str(path),
         allow_network=allow_network,
         allow_writes=allow_writes,
-        allow_human_review=allow_human_review,
+        allow_review=allow_review,
         max_actions=max_actions,
         command_field=command_field,
         execute=execute,
@@ -392,8 +419,9 @@ def _compact_action(manifest: str, action: dict[str, Any], status: str) -> dict[
         "agent_hint": action.get("agent_hint", ""),
         "source_guidance_summary": action.get("source_guidance_summary", {}),
         "official_bibtex_url": action.get("official_bibtex_url"),
+        "manual_official_bibtex_instructions": action.get("manual_official_bibtex_instructions"),
         "returncode": action.get("returncode"),
-        "requires_human_review": bool(action.get("requires_human_review")),
+        "requires_review": bool(action.get("requires_review")),
         "writes_files": bool(action.get("writes_files")),
         "network_required": bool(action.get("network_required")),
     }
@@ -481,6 +509,7 @@ def render_next_action_summary_markdown(summary: dict[str, Any]) -> str:
             lines.append(f"- Blocker: `{recommended.get('skip_reason')}`")
         if recommended.get("hint"):
             lines.append(f"- Hint: {recommended.get('hint')}")
+        _append_manual_official_bibtex_markdown(lines, recommended.get("manual_official_bibtex_instructions"))
         if recommended.get("command"):
             lines.extend(["", "```bash", str(recommended.get("command")), "```"])
 
@@ -498,6 +527,7 @@ def render_next_action_summary_markdown(summary: dict[str, Any]) -> str:
                 lines.append(f"  - Action: {action.get('action_summary')}")
             if action.get("agent_hint"):
                 lines.append(f"  - Hint: {action.get('agent_hint')}")
+            _append_manual_official_bibtex_markdown(lines, action.get("manual_official_bibtex_instructions"), prefix="  ")
             if action.get("command"):
                 lines.append(f"  - Command: `{action.get('command')}`")
 
@@ -510,3 +540,24 @@ def render_next_action_summary_markdown(summary: dict[str, Any]) -> str:
                 lines.append(f"  - Command: `{action.get('command')}`")
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _append_manual_official_bibtex_markdown(lines: list[str], guide: Any, *, prefix: str = "") -> None:
+    if not isinstance(guide, dict):
+        return
+    lines.append(f"{prefix}- Manual official BibTeX guide:")
+    if guide.get("official_record_url"):
+        lines.append(f"{prefix}  - Official record: {guide.get('official_record_url')}")
+    if guide.get("official_bibtex_url"):
+        lines.append(f"{prefix}  - Official BibTeX/export URL: {guide.get('official_bibtex_url')}")
+    save_as = guide.get("save_as") or []
+    if save_as:
+        lines.append(f"{prefix}  - Save as: `{save_as[0]}`")
+        for alternative in save_as[1:3]:
+            lines.append(f"{prefix}    - Alternative: `{alternative}`")
+    steps = guide.get("steps") or []
+    for step in steps[:5]:
+        lines.append(f"{prefix}  - {step}")
+    do_not_use = guide.get("do_not_use") or []
+    if do_not_use:
+        lines.append(f"{prefix}  - Do not use: {', '.join(str(item) for item in do_not_use[:3])}.")

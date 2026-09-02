@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
+import unicodedata
 
 
 ENTRY_RE = re.compile(r"@\s*(?P<type>\w+)\s*\{\s*(?P<key>[^,\s]+)\s*,(?P<body>.*)\}\s*$", re.DOTALL)
@@ -137,6 +139,57 @@ def normalize_bibtex_fields(entry: dict[str, str]) -> dict[str, str]:
         normalized["publisher"] = publisher_aliases.get(publisher.lower(), publisher)
 
     return normalized
+
+
+_CASE_INSENSITIVE_SEMANTIC_FIELDS = {
+    "address",
+    "author",
+    "booktitle",
+    "editor",
+    "howpublished",
+    "institution",
+    "journal",
+    "organization",
+    "publisher",
+    "school",
+    "series",
+    "title",
+}
+
+
+def _semantic_bibtex_value(field: str, value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    normalized = re.sub(r"(?<!\\)[{}]", "", normalized)
+    if field in _CASE_INSENSITIVE_SEMANTIC_FIELDS:
+        normalized = normalized.casefold()
+    return normalized
+
+
+def bibtex_semantic_fields(text: str) -> dict[str, str]:
+    """Return metadata used to compare BibTeX entries independent of serialization."""
+
+    entry = normalize_bibtex_fields(parse_bibtex_entry(text))
+    semantic = {"entry_type": entry["entry_type"].lower()}
+    for field, value in entry.items():
+        if field in {"entry_type", "citation_key"}:
+            continue
+        semantic[field] = _semantic_bibtex_value(field, value)
+    return semantic
+
+
+def bibtex_semantic_sha256(text: str) -> str:
+    payload = json.dumps(
+        bibtex_semantic_fields(text),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return sha256_text(payload)
+
+
+def bibtex_entries_semantically_equal(left: str, right: str) -> bool:
+    return bibtex_semantic_fields(left) == bibtex_semantic_fields(right)
 
 
 def rekey_bibtex_entry(text: str, citation_key: str) -> str:

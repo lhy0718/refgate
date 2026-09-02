@@ -17,7 +17,7 @@ python -m build
 Also check the agent packaging surfaces before tagging:
 
 ```bash
-python -m pytest tests/test_plugin_packaging.py tests/test_claude_code_pack.py tests/test_docs_examples.py -q
+python -m pytest tests/test_plugin_packaging.py tests/test_claude_code_plugin.py tests/test_docs_examples.py -q
 ```
 
 If build isolation is unavailable in a locked-down environment, first install

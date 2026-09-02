@@ -42,6 +42,12 @@ VENUE_SOURCE_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("wiley", ("wiley", "onlinelibrary.wiley.com")),
 )
 
+DOI_SOURCE_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("acm", ("10.1145/",)),
+    ("ieee", ("10.1109/",)),
+    ("sage", ("10.1518/",)),
+)
+
 
 def recommended_sources(entry: LockEntry) -> list[str]:
     record = entry.record
@@ -56,6 +62,10 @@ def recommended_sources(entry: LockEntry) -> list[str]:
 
     if record.get("doi"):
         add_source("crossref")
+        doi = str(record.get("doi") or "").lower()
+        for source, prefixes in DOI_SOURCE_HINTS:
+            if any(doi.startswith(prefix) for prefix in prefixes):
+                add_source(source)
     if ("learning representations" in source_text or "iclr" in source_text) and "proceedings.iclr.cc" not in url:
         add_source("openreview")
     if ("ieee" in source_text or "icassp" in source_text) and not record.get("doi") and not url:

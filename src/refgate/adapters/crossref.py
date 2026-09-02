@@ -8,7 +8,7 @@ import json
 
 from refgate.auth import append_query_param, crossref_mailto
 from refgate.models import AuthorityRecord, CandidateRecord, PaperQuery
-from refgate.resolver import normalize_title
+from refgate.resolver import title_match_kind
 
 
 CROSSREF_API_URL = "https://api.crossref.org/works"
@@ -86,7 +86,7 @@ class CrossrefAdapter:
         params = urlencode({"query.title": query.title, "rows": 5})
         data = json.loads(self.fetcher(f"{CROSSREF_API_URL}?{params}"))
         candidates = [_candidate_from_work(item) for item in data.get("message", {}).get("items", [])]
-        return [candidate for candidate in candidates if normalize_title(candidate.title) == normalize_title(query.title)]
+        return [candidate for candidate in candidates if title_match_kind(query.title, candidate.title)]
 
     def fetch_authority(self, candidate: CandidateRecord) -> AuthorityRecord | None:
         if candidate.source != self.name or not candidate.url:

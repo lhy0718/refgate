@@ -51,7 +51,12 @@ def _bibtex_file(bibtex_dir: Path, citation_key: str) -> Path | None:
 
 def _official_bibtex_file(official_bibtex_dir: Path, citation_key: str, source: str) -> Path | None:
     for suffix in (".bib", ".bibtex"):
-        for name in (f"{citation_key}.{source}{suffix}", f"{citation_key}.source{suffix}", f"{citation_key}{suffix}"):
+        for name in (
+            f"{citation_key}.{source}{suffix}",
+            f"{citation_key}.SOURCE{suffix}",
+            f"{citation_key}.source{suffix}",
+            f"{citation_key}{suffix}",
+        ):
             path = official_bibtex_dir / name
             if path.exists():
                 return path
@@ -165,6 +170,14 @@ def _official_bibtex_checks(
             )
     elif candidate_doi:
         checks["doi"] = "missing_in_bibtex"
+        issues.append(
+            {
+                "code": "OFFICIAL_BIBTEX_DOI_MISSING",
+                "message": "Official BibTeX export is missing the DOI present in the selected authority record.",
+                "citation_key": citation_key,
+                "evidence": [candidate_doi],
+            }
+        )
     elif bibtex_doi:
         checks["doi"] = "authority_doi_missing"
 
@@ -394,6 +407,41 @@ def _source_guidance(source: str, citation_key: str) -> dict[str, Any]:
     return guidance
 
 
+def _manual_official_bibtex_instructions(
+    *,
+    citation_key: str,
+    source: str,
+    authority: dict[str, Any],
+    official_bibtex_file_examples: list[str],
+) -> dict[str, Any]:
+    record_url = authority.get("record_url")
+    bibtex_url = authority.get("bibtex_url")
+    source_label = source.upper() if source else "publisher/venue"
+    steps = [
+        f"Open the official {source_label} record page.",
+        "Use the page's Cite, Export Citation, Download Citation, or BibTeX control.",
+        "Copy or download the BibTeX that is exported by the official publisher or venue page.",
+        "Save the BibTeX entry using one of the listed fixture filenames.",
+        "Rerun the attached reference-check command so Refgate can validate title and DOI before updating the lockfile.",
+    ]
+    if bibtex_url:
+        steps.insert(1, "If the direct citation-export URL works in a browser, use it to download BibTeX.")
+    return {
+        "citation_key": citation_key,
+        "source": source,
+        "official_record_url": record_url,
+        "official_bibtex_url": bibtex_url,
+        "save_as": official_bibtex_file_examples,
+        "steps": steps,
+        "accepted_input": "Only the BibTeX exported by the official publisher or venue page should be saved as an official fixture.",
+        "do_not_use": [
+            "Google Scholar BibTeX",
+            "Crossref-generated BibTeX when an official publisher or venue export exists",
+            "handwritten or model-generated BibTeX",
+        ],
+    }
+
+
 def _row_for_citation(rows: list[dict[str, Any]], citation_key: str) -> dict[str, Any] | None:
     for row in rows:
         if row.get("citation_key") == citation_key:
@@ -440,7 +488,7 @@ def build_reference_check_next_actions(
                 {
                     "code": "ADD_REFERENCE_CANDIDATES",
                     "kind": "reference_candidate_input",
-                    "requires_human_review": True,
+                    "requires_review": True,
                     "writes_files": True,
                     "network_required": False,
                     "message": "Add reviewed candidate records for this citation key, or rerun reference-check with --live.",
@@ -469,7 +517,7 @@ def build_reference_check_next_actions(
                 {
                     "code": "REVIEW_REFERENCE_CANDIDATE",
                     "kind": "reference_candidate_review",
-                    "requires_human_review": True,
+                    "requires_review": True,
                     "writes_files": True,
                     "network_required": False,
                     "message": (
@@ -505,7 +553,7 @@ def build_reference_check_next_actions(
                 {
                     "code": "RETRY_OR_CACHE_LIVE_LOOKUP",
                     "kind": "live_lookup",
-                    "requires_human_review": False,
+                    "requires_review": False,
                     "writes_files": True,
                     "network_required": True,
                     "message": "Live lookup failed; inspect rate limits or retry with reviewed cache/prefer-cache.",
@@ -533,7 +581,7 @@ def build_reference_check_next_actions(
                 {
                     "code": "ADD_OFFICIAL_HTML_FIXTURE",
                     "kind": "official_html_fixture_input",
-                    "requires_human_review": True,
+                    "requires_review": True,
                     "writes_files": True,
                     "network_required": False,
                     "message": (
@@ -569,22 +617,29 @@ def build_reference_check_next_actions(
             authority = _decision_authority(row)
             source = str(authority.get("source") or (sources or ["source"])[0])
             source_guidance = _source_guidance(source, citation_key)
+            official_bibtex_file_examples = (
+                [str(official_bibtex_root / example) for example in source_guidance["official_bibtex_file_examples"]]
+                if citation_key
+                else [str(official_bibtex_root)]
+            )
             actions.append(
                 {
                     "code": "ADD_OFFICIAL_BIBTEX_FIXTURE",
                     "kind": "official_bibtex_fixture_input",
-                    "requires_human_review": True,
+                    "requires_review": True,
                     "writes_files": True,
                     "network_required": False,
                     "message": "Official BibTeX fetch failed; save the reviewed official export as a citation-key file and rerun reference-check.",
                     "citation_key": citation_key,
                     "official_bibtex_dir": str(official_bibtex_root),
                     "official_bibtex_url": authority.get("bibtex_url"),
-                    "official_bibtex_file_examples": [
-                        str(official_bibtex_root / example) for example in source_guidance["official_bibtex_file_examples"]
-                    ]
-                    if citation_key
-                    else [str(official_bibtex_root)],
+                    "official_bibtex_file_examples": official_bibtex_file_examples,
+                    "manual_official_bibtex_instructions": _manual_official_bibtex_instructions(
+                        citation_key=citation_key,
+                        source=source,
+                        authority=authority,
+                        official_bibtex_file_examples=official_bibtex_file_examples,
+                    ),
                     "source_guidance": source_guidance,
                     "command": _reference_check_rerun_command(
                         lock_path=lock_path,
@@ -610,18 +665,33 @@ def build_reference_check_next_actions(
             source = str(authority.get("source") or ((sources or [None])[0] or "source"))
             source_guidance = _source_guidance(source, citation_key)
             official_bibtex_url = authority.get("bibtex_url")
+            official_bibtex_file_examples = (
+                [
+                    str(official_bibtex_root / f"{citation_key}.SOURCE.bib"),
+                    str(official_bibtex_root / f"{citation_key}.source.bib"),
+                    str(official_bibtex_root / f"{citation_key}.bib"),
+                ]
+                if citation_key
+                else [str(official_bibtex_root)]
+            )
             if official_bibtex_url and not fetch_official_bibtex:
                 actions.append(
                     {
                         "code": "FETCH_OFFICIAL_BIBTEX_EXPORT",
                         "kind": "official_bibtex_fetch",
-                        "requires_human_review": False,
+                        "requires_review": False,
                         "writes_files": True,
                         "network_required": True,
                         "message": "The selected authority exposes an official BibTeX URL; fetch it before using a manual fallback.",
                         "citation_key": citation_key,
                         "official_bibtex_url": official_bibtex_url,
                         "source_guidance": source_guidance,
+                        "manual_official_bibtex_instructions": _manual_official_bibtex_instructions(
+                            citation_key=citation_key,
+                            source=source,
+                            authority=authority,
+                            official_bibtex_file_examples=official_bibtex_file_examples,
+                        ),
                         "command": _reference_check_rerun_command(
                             lock_path=lock_path,
                             candidate_dir=candidate_dir,
@@ -644,7 +714,7 @@ def build_reference_check_next_actions(
                 {
                     "code": "ADD_BIBTEX_PROVENANCE",
                     "kind": "bibtex_provenance_input",
-                    "requires_human_review": True,
+                    "requires_review": True,
                     "writes_files": True,
                     "network_required": False,
                     "message": "Add a reviewed official BibTeX export fixture or reviewed manual fallback file before updating the lockfile.",
@@ -653,6 +723,16 @@ def build_reference_check_next_actions(
                     "official_bibtex_url": official_bibtex_url,
                     "preferred_input": "official_bibtex_export" if official_bibtex_url else "reviewed_manual_fallback_or_official_fixture",
                     "source_guidance": source_guidance,
+                    "manual_official_bibtex_instructions": (
+                        _manual_official_bibtex_instructions(
+                            citation_key=citation_key,
+                            source=source,
+                            authority=authority,
+                            official_bibtex_file_examples=official_bibtex_file_examples,
+                        )
+                        if official_bibtex_url
+                        else None
+                    ),
                     "missing_inputs": ["official_bibtex_export_or_reviewed_manual_fallback"],
                     "input_options": [
                         {
@@ -680,15 +760,7 @@ def build_reference_check_next_actions(
                             "validation": ["title_exact_normalized"],
                         },
                     ],
-                    "official_bibtex_file_examples": (
-                        [
-                            str(official_bibtex_root / f"{citation_key}.SOURCE.bib"),
-                            str(official_bibtex_root / f"{citation_key}.source.bib"),
-                            str(official_bibtex_root / f"{citation_key}.bib"),
-                        ]
-                        if citation_key
-                        else [str(official_bibtex_root)]
-                    ),
+                    "official_bibtex_file_examples": official_bibtex_file_examples,
                     "command": _reference_check_rerun_command(
                         lock_path=lock_path,
                         candidate_dir=candidate_dir,
@@ -713,7 +785,7 @@ def build_reference_check_next_actions(
             {
                 "code": "AUDIT_BIB_AFTER_REFERENCE_UPDATE",
                 "kind": "validation_command",
-                "requires_human_review": False,
+                "requires_review": False,
                 "writes_files": False,
                 "network_required": False,
                 "message": "Lockfile provenance was updated; rerun the submission bibliography audit.",
@@ -724,7 +796,7 @@ def build_reference_check_next_actions(
             {
                 "code": "SYNC_BIBTEX_AFTER_REFERENCE_UPDATE",
                 "kind": "bibtex_sync",
-                "requires_human_review": False,
+                "requires_review": False,
                 "writes_files": False,
                 "network_required": False,
                 "message": "Lockfile provenance was updated; plan a canonical BibTeX synchronization for the manuscript bibliography.",
@@ -749,7 +821,7 @@ def build_reference_check_next_actions(
                 {
                     "code": "WRITE_REFERENCE_LOCK",
                     "kind": "lockfile_update",
-                    "requires_human_review": True,
+                    "requires_review": True,
                     "writes_files": True,
                     "network_required": False,
                     "message": "References were selected but the lockfile was not updated; rerun with --write-lock when provenance inputs are ready.",
@@ -921,6 +993,12 @@ def run_reference_check(
             if check_issues:
                 blocking.extend(check_issues)
                 bibtex_record = None
+            elif fetch_official_bibtex:
+                row["official_bibtex_fetch"] = {
+                    "attempted": False,
+                    "status": "skipped",
+                    "reason": "validated_official_fixture_preferred",
+                }
         elif bibtex_root:
             bibtex_path, bibtex_match_method, bibtex_lookup_issues = _bibtex_file_for_reference(
                 bibtex_root,

@@ -186,12 +186,12 @@ def run_claim_source_check(
             suggestion_note = (
                 f"Refgate source-map overlap score {score}, coverage {best['coverage']:.2f} "
                 f"from weak evidence kind {evidence_kind}; "
-                "full source passage or human review required before marking checked."
+                "full source passage or source-evidence review required before marking checked."
             )
         else:
             suggestion_note = (
                 f"Refgate source-map overlap score {score}, coverage {best['coverage']:.2f}; "
-                "direct source review required before marking checked."
+                "source-evidence review required before marking checked."
             )
         row["notes"] = f"{note} {suggestion_note}".strip() if note else suggestion_note
         updated += 1

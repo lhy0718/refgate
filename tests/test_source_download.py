@@ -150,6 +150,40 @@ def test_source_download_prefers_official_bibtex_pdf_url_over_neurips_abstract_r
     assert reason is None
 
 
+def test_source_download_prefers_pmlr_official_bibtex_pdf_field_over_flat_record_derivation():
+    entry = LockEntry(
+        citation_key="mozannar_sontag_2020_defer",
+        short_title="Consistent Estimators for Learning to Defer to an Expert",
+        status="verified_official_bibtex",
+        record={
+            "title": "Consistent Estimators for Learning to Defer to an Expert",
+            "url": "https://proceedings.mlr.press/v119/mozannar20b.html",
+        },
+        authority={
+            "source": "pmlr",
+            "record_url": "https://proceedings.mlr.press/v119/mozannar20b.html",
+        },
+        bibtex={
+            "source_kind": "official_export",
+            "canonical_text": """@inproceedings{mozannar20b,
+  title = {Consistent Estimators for Learning to Defer to an Expert},
+  pdf = {http://proceedings.mlr.press/v119/mozannar20b/mozannar20b.pdf},
+  url = {https://proceedings.mlr.press/v119/mozannar20b.html},
+  year = {2020}
+}
+""",
+        },
+        resolver={},
+        checked_at="2026-07-10",
+    )
+
+    url, source, reason = source_pdf_url_for_entry(entry)
+
+    assert url == "https://proceedings.mlr.press/v119/mozannar20b/mozannar20b.pdf"
+    assert source == "pmlr"
+    assert reason is None
+
+
 def test_source_download_derives_neurips_pdf_from_abstract_html_without_conference_suffix():
     entry = LockEntry(
         citation_key="brown2020language",

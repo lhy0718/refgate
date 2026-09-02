@@ -1,6 +1,6 @@
 {
   "name": "refgate",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Use the Refgate CLI to gate manuscript references, BibTeX provenance, source PDFs, and citation evidence.",
   "author": {
     "name": "Refgate contributors",

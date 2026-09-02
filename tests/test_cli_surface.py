@@ -205,7 +205,7 @@ def test_cli_paper_audit_bootstraps_common_tex_bib_repo(tmp_path, capsys):
         "reviewed_manual_fallback",
     }
     assert all("kind" in action for action in payload["next_actions"])
-    assert all("requires_human_review" in action for action in payload["next_actions"])
+    assert all("requires_review" in action for action in payload["next_actions"])
     assert all("writes_files" in action for action in payload["next_actions"])
     assert all("network_required" in action for action in payload["next_actions"])
     assert "next_actions" not in payload["data"]
@@ -246,6 +246,167 @@ def test_cli_paper_audit_separates_accepted_provenance_notes(tmp_path, capsys):
     assert "`DOI_MISSING` `debenedetti2024agentdojo`" in report_text
 
 
+def test_cli_paper_audit_warns_verified_arxiv_fallback_needs_official_monitor(tmp_path, capsys):
+    tex = tmp_path / "paper.tex"
+    bib = tmp_path / "references.bib"
+    lock = tmp_path / "refgate.lock.json"
+    claims = tmp_path / "claims.tsv"
+    report = tmp_path / "refgate_audit.md"
+    resolver_output = tmp_path / "refgate_queries.json"
+    fixture_lock = json.loads((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8"))
+    entry = fixture_lock["entries"][0]
+    entry["status"] = "arxiv_fallback_verified"
+    entry["record"]["doi"] = None
+    entry["record"]["arxiv_id"] = "2406.13352"
+    entry["record"]["accessed_at"] = "2026-06-09"
+    entry["authority"] = {
+        "source": "arxiv",
+        "record_url": "https://arxiv.org/abs/2406.13352",
+        "retrieval_method": "arxiv_exact_id",
+        "source_priority": 2,
+    }
+    entry["bibtex"]["source_kind"] = "arxiv_manual_normalized"
+    entry["bibtex"]["fallback_reason"] = "Official publication BibTeX was not confirmed; arXiv record was verified as fallback provenance."
+    entry["bibtex"]["field_checks"]["doi"] = "missing"
+    tex.write_text("\\section{Intro}\n\\cite{debenedetti2024agentdojo}\n", encoding="utf-8")
+    bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
+    lock.write_text(json.dumps(fixture_lock), encoding="utf-8")
+    claims.write_text("claim_id\tclaim_text\tcitation_key\tstatus\tevidence_text\tsource_location\tnotes\n", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "paper-audit",
+            "--tex",
+            str(tex),
+            "--bib",
+            str(bib),
+            "--lock",
+            str(lock),
+            "--claims",
+            str(claims),
+            "--report",
+            str(report),
+            "--resolver-output",
+            str(resolver_output),
+            "--submission",
+            "--include-issues",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert [item["code"] for item in payload["warnings"]] == ["ARXIV_OFFICIAL_RECORD_MONITOR_REQUIRED"]
+    action = next(action for action in payload["next_actions"] if action["code"] == "MONITOR_ARXIV_OFFICIAL_RECORDS")
+    assert action["kind"] == "official_record_monitor"
+    assert action["network_required"] is False
+    assert "monitor-official-records" in action["command"]
+    assert action["discovery_sources"] == ["google_scholar"]
+    assert "discovery-only" in action["discovery_note"]
+    assert "scholar-official-bridge" in action["scholar_bridge_command"]
+    assert "--live-scholar" in action["scholar_bridge_command"]
+    assert "--live-official" in action["scholar_bridge_command"]
+    assert "--live" in action["live_reference_check_command"]
+    assert "debenedetti2024agentdojo" in action["citation_key_sample"]
+    assert "ARXIV_OFFICIAL_RECORD_MONITOR_REQUIRED" in report.read_text(encoding="utf-8")
+
+
+def test_cli_official_monitor_and_scholar_bridge_accept_generated_fetch_flag(tmp_path, capsys):
+    lock = tmp_path / "refgate.lock.json"
+    lock.write_text(json.dumps({"schema_version": "refgate.lock.v1", "entries": []}), encoding="utf-8")
+
+    monitor_exit = main(["monitor-official-records", "--lock", str(lock), "--fetch-official-bibtex", "--json"])
+    monitor_payload = json.loads(capsys.readouterr().out)
+    assert monitor_exit == 0
+    assert monitor_payload["ok"] is True
+
+    bridge_exit = main(
+        [
+            "scholar-official-bridge",
+            "--lock",
+            str(lock),
+            "--scholar-html-dir",
+            str(tmp_path / "scholar-html"),
+            "--candidate-dir",
+            str(tmp_path / "reference-candidates"),
+            "--fetch-official-bibtex",
+            "--json",
+        ]
+    )
+    bridge_payload = json.loads(capsys.readouterr().out)
+    assert bridge_exit == 0
+    assert bridge_payload["ok"] is True
+    assert bridge_payload["data"]["checked_count"] == 0
+
+
+def test_cli_run_next_infers_gates_from_selected_command_field(tmp_path, capsys):
+    next_json = tmp_path / "next.json"
+    next_json.write_text(
+        json.dumps(
+            {
+                "next_actions": [
+                    {
+                        "code": "MONITOR_ARXIV_OFFICIAL_RECORDS",
+                        "kind": "official_record_monitor",
+                        "requires_review": False,
+                        "writes_files": False,
+                        "network_required": False,
+                        "command": "python -m refgate monitor-official-records --lock refgate.lock.json --json",
+                        "scholar_bridge_command": (
+                            "python -m refgate scholar-official-bridge --lock refgate.lock.json "
+                            "--scholar-html-dir .refgate/scholar-html --candidate-dir .refgate/reference-candidates "
+                            "--live-official --write-candidates --write-lock refgate.lock.json "
+                            "--fetch-official-bibtex --json"
+                        ),
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["run-next", "--from", str(next_json), "--command-field", "scholar_bridge_command", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["data"]["actions"][0]["selected"] is False
+    assert payload["data"]["actions"][0]["skip_reason"] == "network_required"
+    assert payload["data"]["actions"][0]["network_required"] is True
+    assert payload["data"]["actions"][0]["writes_files"] is True
+
+    exit_code = main(
+        [
+            "run-next",
+            "--from",
+            str(next_json),
+            "--command-field",
+            "scholar_bridge_command",
+            "--allow-network",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["data"]["actions"][0]["selected"] is False
+    assert payload["data"]["actions"][0]["skip_reason"] == "writes_files"
+
+    exit_code = main(
+        [
+            "run-next",
+            "--from",
+            str(next_json),
+            "--command-field",
+            "scholar_bridge_command",
+            "--allow-network",
+            "--allow-writes",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["data"]["actions"][0]["selected"] is True
+    assert payload["data"]["recommended_next"]["status"] == "ready"
+
+
 def test_cli_paper_audit_writes_next_plan_manifest(tmp_path, capsys):
     tex = tmp_path / "paper.tex"
     bib = tmp_path / "references.bib"
@@ -283,7 +444,7 @@ def test_cli_paper_audit_writes_next_plan_manifest(tmp_path, capsys):
     saved_plan = json.loads(plan.read_text(encoding="utf-8"))
     assert exit_code == 1
     assert payload["status"] == "paper_audit_complete"
-    assert saved_plan["schema_version"] == "refgate.next_actions.v1"
+    assert saved_plan["schema_version"] == "refgate.next_actions.v2"
     assert saved_plan["input"] == "paper-audit"
     assert saved_plan["execute"] is False
     assert saved_plan["action_count"] == len(payload["next_actions"])
@@ -512,10 +673,12 @@ def test_cli_paper_audit_can_build_source_map_from_citation_key_files(tmp_path, 
     bundle_action = next(action for action in payload["next_actions"] if action["code"] == "EXPORT_CODEX_REVIEW_BUNDLE")
     assert bundle_action["kind"] == "codex_claim_review_bundle"
     assert "export-review-bundle" in bundle_action["command"]
+    assert ".refgate/.refgate" not in bundle_action["command"]
+    assert ".refgate/.refgate" not in bundle_action["import_command"]
     assert "import-review" in bundle_action["import_command"]
     review_action = next(action for action in payload["next_actions"] if action["code"] == "REVIEW_CLAIM_EVIDENCE")
     assert review_action["kind"] == "claim_evidence_review"
-    assert review_action["requires_human_review"] is True
+    assert review_action["requires_review"] is True
     assert review_action["writes_files"] is False
     assert rows[0]["status"] == "needs_review"
     assert rows[0]["source_location"].startswith("sources/debenedetti2024agentdojo.txt: ")
@@ -706,7 +869,7 @@ def test_cli_paper_audit_claim_review_summarizes_no_match_sources(tmp_path, caps
     assert payload["data"]["claim_source_check"]["no_match_claims"][0]["claim_id"] == "claim-0001"
     no_match_action = next(action for action in payload["next_actions"] if action["code"] == "REVIEW_NO_MATCH_CLAIMS")
     assert no_match_action["kind"] == "claim_evidence_review"
-    assert no_match_action["requires_human_review"] is True
+    assert no_match_action["requires_review"] is True
     assert no_match_action["writes_files"] is False
     assert "No Evidence Match In Mapped Source" in review
     assert "CLAIM_EVIDENCE_NOT_FOUND_IN_SOURCE" in review
@@ -726,7 +889,7 @@ def test_cli_run_next_plans_actions_without_execution(tmp_path, capsys):
                     {
                         "code": "AUDIT_BIB_AFTER_REFERENCE_UPDATE",
                         "kind": "validation_command",
-                        "requires_human_review": False,
+                        "requires_review": False,
                         "writes_files": False,
                         "network_required": False,
                         "command": "python -m refgate audit-bib --bib PAPER_BIB --lock refgate.lock.json --submission --json",
@@ -734,7 +897,7 @@ def test_cli_run_next_plans_actions_without_execution(tmp_path, capsys):
                     {
                         "code": "MAP_CLAIM_SOURCES",
                         "kind": "claim_source_mapping",
-                        "requires_human_review": True,
+                        "requires_review": True,
                         "writes_files": True,
                         "network_required": False,
                         "command": "python -m refgate paper-audit --tex paper.tex --bib references.bib --source-dir SOURCES_DIR --json",
@@ -767,7 +930,7 @@ def test_cli_run_next_accepts_saved_next_plan_manifest(tmp_path, capsys):
     next_plan.write_text(
         json.dumps(
             {
-                "schema_version": "refgate.next_actions.v1",
+                "schema_version": "refgate.next_actions.v2",
                 "ok": True,
                 "input": "paper-audit",
                 "execute": False,
@@ -783,7 +946,7 @@ def test_cli_run_next_accepts_saved_next_plan_manifest(tmp_path, capsys):
                         "skip_reason": "writes_files",
                         "code": "RESOLVE_REFERENCE_PROVENANCE",
                         "kind": "reference_provenance",
-                        "requires_human_review": True,
+                        "requires_review": True,
                         "writes_files": True,
                         "network_required": False,
                         "command": "python -m refgate resolver-assist --lock refgate.lock.json --json",
@@ -816,7 +979,7 @@ def test_cli_run_next_can_plan_auxiliary_command_field_when_inputs_are_ready(tmp
                     {
                         "code": "RESOLVE_REFERENCE_PROVENANCE",
                         "kind": "reference_provenance",
-                        "requires_human_review": True,
+                        "requires_review": True,
                         "writes_files": True,
                         "network_required": False,
                         "command": "python -m refgate resolver-assist --lock refgate.lock.json --json",
@@ -845,7 +1008,7 @@ def test_cli_run_next_can_plan_auxiliary_command_field_when_inputs_are_ready(tmp
             "--command-field",
             "reference_check_command",
             "--allow-writes",
-            "--allow-human-review",
+            "--allow-review",
             "--json",
         ]
     )
@@ -866,7 +1029,7 @@ def test_cli_run_next_can_plan_auxiliary_command_field_when_inputs_are_ready(tmp
             "--command-field",
             "reference_check_command",
             "--allow-writes",
-            "--allow-human-review",
+            "--allow-review",
             "--json",
         ]
     )
@@ -890,7 +1053,7 @@ def test_cli_run_next_preserves_source_guidance_for_agent_review(tmp_path, capsy
                         "code": "FETCH_OFFICIAL_BIBTEX_EXPORT",
                         "kind": "official_bibtex_fetch",
                         "citation_key": "smith2026acm",
-                        "requires_human_review": False,
+                        "requires_review": False,
                         "writes_files": True,
                         "network_required": True,
                         "message": "The selected authority exposes an official BibTeX URL.",
@@ -938,7 +1101,7 @@ def test_cli_run_next_execute_runs_allowed_refgate_command(tmp_path, capsys):
                     {
                         "code": "VALIDATE_SOURCE_TEXT",
                         "kind": "validation_command",
-                        "requires_human_review": False,
+                        "requires_review": False,
                         "writes_files": False,
                         "network_required": False,
                         "command": (
@@ -975,7 +1138,7 @@ def test_cli_run_next_writes_plan_and_run_log(tmp_path, capsys):
                     {
                         "code": "VALIDATE_SOURCE_TEXT",
                         "kind": "validation_command",
-                        "requires_human_review": False,
+                        "requires_review": False,
                         "writes_files": False,
                         "network_required": False,
                         "command": (
@@ -986,7 +1149,7 @@ def test_cli_run_next_writes_plan_and_run_log(tmp_path, capsys):
                     {
                         "code": "WRITE_REVIEW",
                         "kind": "claim_evidence_review",
-                        "requires_human_review": True,
+                        "requires_review": True,
                         "writes_files": True,
                         "network_required": False,
                         "command": "python -m refgate claim-report --claims claims.tsv --output review.md --json",
@@ -1015,7 +1178,7 @@ def test_cli_run_next_writes_plan_and_run_log(tmp_path, capsys):
     saved_plan = json.loads(plan.read_text(encoding="utf-8"))
     saved_run_log = json.loads(run_log.read_text(encoding="utf-8"))
     assert exit_code == 0
-    assert payload["data"]["schema_version"] == "refgate.next_actions.v1"
+    assert payload["data"]["schema_version"] == "refgate.next_actions.v2"
     assert saved_plan["execute"] is False
     assert saved_plan["selected_count"] == 1
     assert saved_plan["actions"][1]["skip_reason"] == "writes_files"
@@ -1032,7 +1195,7 @@ def test_cli_run_summary_reports_remaining_actions(tmp_path, capsys):
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": "refgate.next_actions.v1",
+                "schema_version": "refgate.next_actions.v2",
                 "ok": False,
                 "execute": True,
                 "selected_count": 2,
@@ -1084,7 +1247,7 @@ def test_cli_run_summary_writes_markdown_report(tmp_path, capsys):
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": "refgate.next_actions.v1",
+                "schema_version": "refgate.next_actions.v2",
                 "ok": True,
                 "execute": False,
                 "selected_count": 0,
@@ -1124,7 +1287,7 @@ def test_cli_run_summary_keeps_compact_source_guidance(tmp_path, capsys):
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": "refgate.next_actions.v1",
+                "schema_version": "refgate.next_actions.v2",
                 "ok": True,
                 "execute": False,
                 "selected_count": 0,
@@ -1133,18 +1296,31 @@ def test_cli_run_summary_keeps_compact_source_guidance(tmp_path, capsys):
                     {
                         "index": 0,
                         "selected": False,
-                        "skip_reason": "requires_human_review",
+                        "skip_reason": "requires_review",
                         "code": "ADD_OFFICIAL_BIBTEX_FIXTURE",
                         "kind": "official_bibtex_fixture_input",
                         "citation_key": "smith2026acm",
                         "action_summary": "Save reviewed official BibTeX fixture for smith2026acm.",
                         "agent_hint": "Save the reviewed publisher BibTeX export using one of the official_bibtex_file_examples, then rerun reference-check.",
                         "official_bibtex_url": "https://dl.acm.org/action/exportCiteProcCitation?dois=10.1145%2Ffixture&targetFile=custom-bibtex&format=bibTex",
+                        "manual_official_bibtex_instructions": {
+                            "citation_key": "smith2026acm",
+                            "source": "acm",
+                            "official_record_url": "https://dl.acm.org/doi/10.1145/fixture",
+                            "official_bibtex_url": "https://dl.acm.org/action/exportCiteProcCitation?dois=10.1145%2Ffixture&targetFile=custom-bibtex&format=bibTex",
+                            "save_as": ["OFFICIAL_BIBTEX_DIR/smith2026acm.acm.bib"],
+                            "steps": [
+                                "Open the official ACM record page.",
+                                "Use the page's Cite, Export Citation, Download Citation, or BibTeX control.",
+                            ],
+                            "accepted_input": "Only official publisher BibTeX.",
+                            "do_not_use": ["Google Scholar BibTeX"],
+                        },
                         "source_guidance_summary": {
                             "source": "acm",
                             "official_bibtex_file_examples": ["smith2026acm.acm.bib"],
                         },
-                        "requires_human_review": True,
+                        "requires_review": True,
                         "writes_files": True,
                         "network_required": False,
                         "command": "python -m refgate reference-check --lock refgate.lock.json --official-bibtex-dir OFFICIAL_BIBTEX_DIR --json",
@@ -1164,7 +1340,58 @@ def test_cli_run_summary_keeps_compact_source_guidance(tmp_path, capsys):
     assert action["action_summary"].startswith("Save reviewed official BibTeX fixture")
     assert action["source_guidance_summary"]["source"] == "acm"
     assert action["official_bibtex_url"].startswith("https://dl.acm.org/")
+    assert action["manual_official_bibtex_instructions"]["save_as"][0].endswith("smith2026acm.acm.bib")
     assert payload["data"]["recommended_next"]["action_summary"].startswith("Save reviewed official BibTeX fixture")
+    assert payload["data"]["recommended_next"]["manual_official_bibtex_instructions"]["source"] == "acm"
+
+
+def test_cli_run_summary_markdown_includes_manual_official_bibtex_guide(tmp_path, capsys):
+    manifest = tmp_path / "next_plan.json"
+    markdown = tmp_path / "next_summary.md"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "refgate.next_actions.v2",
+                "ok": True,
+                "execute": False,
+                "selected_count": 0,
+                "failed_count": 0,
+                "actions": [
+                    {
+                        "index": 0,
+                        "selected": False,
+                        "skip_reason": "requires_review",
+                        "code": "ADD_OFFICIAL_BIBTEX_FIXTURE",
+                        "kind": "official_bibtex_fixture_input",
+                        "citation_key": "smith2026acm",
+                        "action_summary": "Save reviewed official BibTeX fixture for smith2026acm.",
+                        "agent_hint": "Open the official citation page or export URL, save its BibTeX using one listed filename, then rerun reference-check.",
+                        "manual_official_bibtex_instructions": {
+                            "official_record_url": "https://dl.acm.org/doi/10.1145/fixture",
+                            "official_bibtex_url": "https://dl.acm.org/action/exportCiteProcCitation?dois=10.1145%2Ffixture&targetFile=custom-bibtex&format=bibTex",
+                            "save_as": ["OFFICIAL_BIBTEX_DIR/smith2026acm.acm.bib"],
+                            "steps": ["Open the official ACM record page."],
+                            "do_not_use": ["Google Scholar BibTeX"],
+                        },
+                        "requires_review": True,
+                        "writes_files": True,
+                        "network_required": False,
+                        "command": "python -m refgate reference-check --lock refgate.lock.json --official-bibtex-dir OFFICIAL_BIBTEX_DIR --json",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["run-summary", "--input", str(manifest), "--markdown", str(markdown), "--json"])
+
+    report = markdown.read_text(encoding="utf-8")
+    assert exit_code == 1
+    assert "Manual official BibTeX guide" in report
+    assert "https://dl.acm.org/doi/10.1145/fixture" in report
+    assert "OFFICIAL_BIBTEX_DIR/smith2026acm.acm.bib" in report
+    assert "Google Scholar BibTeX" in report
 
 
 def test_cli_run_summary_passes_clean_run_log(tmp_path, capsys):
@@ -1172,7 +1399,7 @@ def test_cli_run_summary_passes_clean_run_log(tmp_path, capsys):
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": "refgate.next_actions.v1",
+                "schema_version": "refgate.next_actions.v2",
                 "ok": True,
                 "execute": True,
                 "selected_count": 1,

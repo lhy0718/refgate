@@ -289,7 +289,7 @@ def build_codex_review_bundle(
             "source_map": str(source_map) if source_map else None,
         },
         "review_policy": {
-            "reviewer": "codex_assisted_human_review",
+            "reviewer": "codex_assisted_source_review",
             "must_use_full_source_text": True,
             "abstract_or_metadata_only_is_weak_evidence": True,
             "do_not_mark_checked_without_user_approval": True,

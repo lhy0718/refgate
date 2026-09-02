@@ -55,6 +55,24 @@ def test_neurips_adapter_discovers_official_bibtex_endpoint():
     assert adapter.fetch_bibtex(authority, adapter.find_export_endpoints(authority)[0]).source_kind == "official_export"
 
 
+def test_neurips_adapter_prefers_conference_year_in_official_record_path_over_page_timestamp():
+    html = """<!doctype html><html><head>
+    <meta name="citation_title" content="AbstentionBench: Reasoning LLMs Fail on Unanswerable Questions">
+    <meta name="citation_author" content="Polina Kirichenko">
+    <meta name="citation_publication_date" content="2026-04-23">
+    </head><body><a href="/paper_files/paper/33052-/bibtex">Bibtex</a></body></html>"""
+    url = (
+        "https://proceedings.neurips.cc/paper_files/paper/2025/hash/"
+        "fb122bfc3f0127a94ded048b5b03496f-Abstract-Datasets_and_Benchmarks_Track.html"
+    )
+
+    candidate = candidate_from_neurips_html(url, html)
+
+    assert candidate.year == 2025
+    assert candidate.raw["html_publication_year"] == 2026
+    assert candidate.raw["year_source"] == "neurips_record_path"
+
+
 def test_neurips_adapter_discovers_from_pdf_url():
     html = (FIXTURES / "neurips_authority.html").read_text(encoding="utf-8")
     fetched_urls = []

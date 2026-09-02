@@ -2,11 +2,176 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
+
+from refgate.adapters.acl import AclAdapter
+from refgate.adapters.crossref import CrossrefAdapter
 from refgate.bibtex import rekey_bibtex_entry, sha256_text
 from refgate.cli import main
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _write_generic_official_fixture_case(
+    tmp_path: Path,
+    *,
+    source: str,
+    fixture_title: str = "Generic Official Fixture",
+    fixture_doi: str = "10.1234/refgate.generic",
+) -> tuple[Path, Path, Path, str]:
+    citation_key = "generic_official_fixture"
+    title = "Generic Official Fixture"
+    doi = "10.1234/refgate.generic"
+    bib = tmp_path / "references.bib"
+    lock = tmp_path / "refgate.lock.json"
+    candidates = tmp_path / "candidates"
+    official_bibtex = tmp_path / "official-bibtex"
+    candidates.mkdir()
+    official_bibtex.mkdir()
+    bib.write_text(
+        f"""@inproceedings{{{citation_key},
+  title = {{{title}}},
+  author = {{Doe, Jane}},
+  booktitle = {{Generic Proceedings}},
+  year = {{2026}},
+  doi = {{{doi}}}
+}}
+""",
+        encoding="utf-8",
+    )
+    main(["bootstrap-lock", "--bib", str(bib), "--output", str(lock), "--json"])
+    (candidates / f"{citation_key}.json").write_text(
+        json.dumps(
+            {
+                "source": source,
+                "title": title,
+                "authors": ["Doe, Jane"],
+                "year": 2026,
+                "venue": "Generic Proceedings",
+                "doi": doi,
+                "url": f"https://publisher.example/{source}/record",
+                "is_official_record": True,
+                "bibtex_url": f"https://publisher.example/{source}/bibtex",
+                "source_priority": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (official_bibtex / f"{citation_key}.SOURCE.bib").write_text(
+        f"""@inproceedings{{publisher-export-key,
+  title = {{{fixture_title}}},
+  author = {{Doe, Jane}},
+  booktitle = {{Generic Proceedings}},
+  year = {{2026}},
+  doi = {{{fixture_doi}}}
+}}
+""",
+        encoding="utf-8",
+    )
+    return lock, candidates, official_bibtex, citation_key
+
+
+LET_ME_ARXIV_TITLE = (
+    "Let Me Speak Freely? A Study on the Impact of Format Restrictions on Performance of Large Language Models"
+)
+LET_ME_ACL_TITLE = (
+    "Let Me Speak Freely? A Study On The Impact Of Format Restrictions On Large Language Model Performance."
+)
+
+
+def _write_let_me_arxiv_lock(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "refgate.lock.v1",
+                "entries": [
+                    {
+                        "citation_key": "let_me_speak_freely",
+                        "short_title": LET_ME_ARXIV_TITLE,
+                        "status": "arxiv_fallback_verified",
+                        "record": {
+                            "title": LET_ME_ARXIV_TITLE,
+                            "authors": ["Zhi Rui Tam", "Cheng-Kuang Wu"],
+                            "year": 2024,
+                            "venue": "arXiv preprint",
+                            "arxiv_id": "2408.02442",
+                            "url": "https://arxiv.org/abs/2408.02442v3",
+                        },
+                        "authority": {
+                            "source": "arxiv",
+                            "record_url": "https://arxiv.org/abs/2408.02442v3",
+                            "record_type": "preprint_record",
+                            "source_priority": 2,
+                            "bibtex_url": None,
+                        },
+                        "bibtex": {
+                            "entry_type": "misc",
+                            "citation_key": "let_me_speak_freely",
+                            "source_kind": "arxiv_manual_normalized",
+                            "raw_sha256": "abc",
+                            "normalized_sha256": "def",
+                        },
+                        "resolver": {"score": 192, "blocking_issues": [], "warnings": [], "decision_trace": []},
+                        "checked_at": "2026-07-10",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _install_let_me_acl_live_fakes(monkeypatch):
+    acl_html = (FIXTURES / "acl_title_variant_authority.html").read_text(encoding="utf-8")
+    acl_bib = (FIXTURES / "acl_title_variant_official.bib").read_text(encoding="utf-8")
+    crossref_payload = json.dumps(
+        {
+            "message": {
+                "items": [
+                    {
+                        "DOI": "10.18653/v1/2024.emnlp-industry.91",
+                        "URL": "https://doi.org/10.18653/v1/2024.emnlp-industry.91",
+                        "title": [LET_ME_ACL_TITLE],
+                        "author": [
+                            {"given": "Zhi Rui", "family": "Tam"},
+                            {"given": "Cheng-Kuang", "family": "Wu"},
+                        ],
+                        "published": {"date-parts": [[2024]]},
+                        "container-title": ["EMNLP Industry Track"],
+                    }
+                ]
+            }
+        }
+    )
+
+    def fake_fetch(url: str) -> str:
+        if url.startswith("https://api.crossref.org/works?"):
+            return crossref_payload
+        if url == "https://aclanthology.org/2024.emnlp-industry.91/":
+            return acl_html
+        if url == "https://aclanthology.org/2024.emnlp-industry.91.bib":
+            return acl_bib
+        raise AssertionError(url)
+
+    def fake_default_adapter(source: str):
+        assert source == "acl"
+        return AclAdapter(fetcher=fake_fetch)
+
+    monkeypatch.setattr("refgate.live_smoke.default_adapter_for_source", fake_default_adapter)
+    monkeypatch.setattr("refgate.reference_check.default_fetcher", fake_fetch)
+
+
+def _assert_let_me_promoted(lock: Path) -> None:
+    entry = json.loads(lock.read_text(encoding="utf-8"))["entries"][0]
+    assert entry["citation_key"] == "let_me_speak_freely"
+    assert entry["status"] == "verified_official_bibtex"
+    assert entry["authority"]["source"] == "acl"
+    assert entry["authority"]["record_url"] == "https://aclanthology.org/2024.emnlp-industry.91/"
+    assert entry["authority"]["bibtex_url"] == "https://aclanthology.org/2024.emnlp-industry.91.bib"
+    assert entry["record"]["doi"] == "10.18653/v1/2024.emnlp-industry.91"
+    assert entry["bibtex"]["source_kind"] == "official_export"
+    assert entry["bibtex"]["field_checks"]["exported_citation_key"] == "tam-etal-2024-speak"
 
 
 def test_reference_check_can_write_verified_official_lock_entry(tmp_path, capsys):
@@ -119,6 +284,8 @@ def test_reference_check_can_fetch_official_bibtex_from_authority_url(monkeypatc
             str(lock),
             "--candidate-dir",
             str(candidates),
+            "--cache-root",
+            str(tmp_path / "cache"),
             "--write-lock",
             str(lock),
             "--fetch-official-bibtex",
@@ -135,6 +302,137 @@ def test_reference_check_can_fetch_official_bibtex_from_authority_url(monkeypatc
     assert lock_data["entries"][0]["citation_key"] == "debenedetti2024agentdojo"
     assert lock_data["entries"][0]["bibtex"]["citation_key"] == "debenedetti2024agentdojo"
     assert lock_data["entries"][0]["bibtex"]["source_kind"] == "official_export"
+
+
+def test_reference_check_prefers_acl_authority_and_accepts_uppercase_source_fixture(monkeypatch, tmp_path, capsys):
+    lock = tmp_path / "refgate.lock.json"
+    official_bibtex = tmp_path / "official-bibtex"
+    official_bibtex.mkdir()
+    main(["bootstrap-lock", "--bib", str(FIXTURES / "acl_official.bib"), "--output", str(lock), "--json"])
+    capsys.readouterr()
+    citation_key = "smith-lee-2026-refgate"
+    (official_bibtex / f"{citation_key}.SOURCE.bib").write_text(
+        (FIXTURES / "acl_official.bib").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    acl_html = (FIXTURES / "acl_authority.html").read_text(encoding="utf-8")
+    crossref_work = {
+        "DOI": "10.18653/v1/2026.acl-long.001",
+        "URL": "https://doi.org/10.18653/v1/2026.acl-long.001",
+        "title": ["Refgate Fixture: Official ACL Export"],
+        "author": [{"given": "Ada", "family": "Smith"}],
+        "published": {"date-parts": [[2026]]},
+        "container-title": ["ACL 2026"],
+    }
+
+    def fake_fetch(url: str) -> str:
+        if url.startswith("https://api.crossref.org/works/"):
+            return json.dumps({"message": crossref_work})
+        if url == "https://aclanthology.org/2026.acl-long.001/":
+            return acl_html
+        raise AssertionError(url)
+
+    def fake_default_adapter(source: str):
+        if source == "acl":
+            return AclAdapter(fetcher=fake_fetch)
+        if source == "crossref":
+            return CrossrefAdapter(fetcher=fake_fetch)
+        raise AssertionError(source)
+
+    monkeypatch.setattr("refgate.live_smoke.default_adapter_for_source", fake_default_adapter)
+
+    exit_code = main(
+        [
+            "reference-check",
+            "--lock",
+            str(lock),
+            "--source",
+            "crossref",
+            "--source",
+            "acl",
+            "--official-bibtex-dir",
+            str(official_bibtex),
+            "--cache-root",
+            str(tmp_path / "cache"),
+            "--write-lock",
+            str(lock),
+            "--fetch-official-bibtex",
+            "--live",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    entry = json.loads(lock.read_text(encoding="utf-8"))["entries"][0]
+    result = payload["data"]["results"][0]
+    assert exit_code == 0
+    assert result["decision"]["authority"]["source"] == "acl"
+    assert result["decision"]["authority"]["bibtex_url"] == "https://aclanthology.org/2026.acl-long.001.bib"
+    assert result["bibtex_match_method"] == "official_bibtex_fixture"
+    assert result["official_bibtex_file"].endswith(f"{citation_key}.SOURCE.bib")
+    assert entry["status"] == "verified_official_bibtex"
+    assert entry["authority"]["source"] == "acl"
+    assert entry["bibtex"]["source_kind"] == "official_export"
+
+
+def test_reference_check_promotes_arxiv_fallback_through_acl_title_variant(monkeypatch, tmp_path, capsys):
+    lock = tmp_path / "refgate.lock.json"
+    _write_let_me_arxiv_lock(lock)
+    _install_let_me_acl_live_fakes(monkeypatch)
+
+    exit_code = main(
+        [
+            "reference-check",
+            "--lock",
+            str(lock),
+            "--source",
+            "acl",
+            "--cache-root",
+            str(tmp_path / "cache"),
+            "--citation-key",
+            "let_me_speak_freely",
+            "--write-lock",
+            str(lock),
+            "--fetch-official-bibtex",
+            "--live",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["data"]["updated_entries"] == 1
+    assert payload["data"]["results"][0]["candidate_count"] == 1
+    _assert_let_me_promoted(lock)
+
+
+def test_monitor_official_records_promotes_arxiv_fallback_through_acl_title_variant(monkeypatch, tmp_path, capsys):
+    lock = tmp_path / "refgate.lock.json"
+    _write_let_me_arxiv_lock(lock)
+    _install_let_me_acl_live_fakes(monkeypatch)
+
+    exit_code = main(
+        [
+            "monitor-official-records",
+            "--lock",
+            str(lock),
+            "--source",
+            "acl",
+            "--cache-root",
+            str(tmp_path / "cache"),
+            "--write-lock",
+            str(lock),
+            "--fetch-official-bibtex",
+            "--live",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "official_monitor_complete"
+    assert payload["data"]["reference_check"]["updated_entries"] == 1
+    _assert_let_me_promoted(lock)
 
 
 def test_reference_check_fetches_inline_official_bibtex_through_adapter(monkeypatch, tmp_path, capsys):
@@ -183,6 +481,8 @@ def test_reference_check_fetches_inline_official_bibtex_through_adapter(monkeypa
             str(lock),
             "--candidate-dir",
             str(candidates),
+            "--cache-root",
+            str(tmp_path / "cache"),
             "--write-lock",
             str(lock),
             "--fetch-official-bibtex",
@@ -371,6 +671,112 @@ def test_reference_check_uses_official_bibtex_fixture_dir_without_live_network(t
     assert lock_data["entries"][0]["bibtex"]["canonical_text"].startswith("@inproceedings{smith2026aaai,")
 
 
+@pytest.mark.parametrize("source", ["acm", "ieee", "sage"])
+def test_reference_check_prefers_validated_source_generic_fixture_when_live_export_would_fail(
+    source, monkeypatch, tmp_path, capsys
+):
+    lock, candidates, official_bibtex, citation_key = _write_generic_official_fixture_case(
+        tmp_path,
+        source=source,
+    )
+    capsys.readouterr()
+
+    monkeypatch.setattr(
+        "refgate.reference_check.run_live_smoke",
+        lambda *_args, **_kwargs: {"candidate_count": 0, "cache_paths": [], "ok": True, "candidates": []},
+    )
+
+    def fail_fetch(*_args, **_kwargs):
+        raise RuntimeError("publisher endpoint unavailable")
+
+    monkeypatch.setattr("refgate.reference_check._fetch_official_bibtex", fail_fetch)
+
+    exit_code = main(
+        [
+            "reference-check",
+            "--lock",
+            str(lock),
+            "--candidate-dir",
+            str(candidates),
+            "--source",
+            source,
+            "--official-bibtex-dir",
+            str(official_bibtex),
+            "--write-lock",
+            str(lock),
+            "--fetch-official-bibtex",
+            "--live",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    entry = json.loads(lock.read_text(encoding="utf-8"))["entries"][0]
+    result = payload["data"]["results"][0]
+    assert exit_code == 0
+    assert payload["blocking_issues"] == []
+    assert result["citation_key"] == citation_key
+    assert result["bibtex_match_method"] == "official_bibtex_fixture"
+    assert result["official_bibtex_fetch"] == {
+        "attempted": False,
+        "status": "skipped",
+        "reason": "validated_official_fixture_preferred",
+    }
+    assert entry["status"] == "verified_official_bibtex"
+    assert entry["authority"]["source"] == source
+    assert entry["bibtex"]["source_kind"] == "official_export"
+
+
+@pytest.mark.parametrize(
+    ("fixture_title", "fixture_doi", "expected_code"),
+    [
+        ("Different Paper", "10.1234/refgate.generic", "OFFICIAL_BIBTEX_TITLE_MISMATCH"),
+        ("Generic Official Fixture", "10.1234/refgate.different", "OFFICIAL_BIBTEX_DOI_MISMATCH"),
+        ("Generic Official Fixture", "", "OFFICIAL_BIBTEX_DOI_MISSING"),
+    ],
+)
+def test_reference_check_blocks_mismatched_source_generic_official_fixture(
+    fixture_title, fixture_doi, expected_code, monkeypatch, tmp_path, capsys
+):
+    lock, candidates, official_bibtex, _citation_key = _write_generic_official_fixture_case(
+        tmp_path,
+        source="sage",
+        fixture_title=fixture_title,
+        fixture_doi=fixture_doi,
+    )
+    capsys.readouterr()
+    monkeypatch.setattr(
+        "refgate.reference_check.run_live_smoke",
+        lambda *_args, **_kwargs: {"candidate_count": 0, "cache_paths": [], "ok": True, "candidates": []},
+    )
+
+    exit_code = main(
+        [
+            "reference-check",
+            "--lock",
+            str(lock),
+            "--candidate-dir",
+            str(candidates),
+            "--source",
+            "sage",
+            "--official-bibtex-dir",
+            str(official_bibtex),
+            "--write-lock",
+            str(lock),
+            "--fetch-official-bibtex",
+            "--live",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    entry = json.loads(lock.read_text(encoding="utf-8"))["entries"][0]
+    assert exit_code == 1
+    assert any(issue["code"] == expected_code for issue in payload["blocking_issues"])
+    assert payload["data"]["updated_entries"] == 0
+    assert entry["status"] == "missing_bibtex_provenance"
+
+
 def test_reference_check_can_fetch_inline_bibtex_from_fixture_html_dir(tmp_path, capsys):
     lock = tmp_path / "refgate.lock.json"
     bib = tmp_path / "references.bib"
@@ -450,6 +856,8 @@ def test_reference_check_preserves_manuscript_key_when_fetched_official_bibtex_u
             str(lock),
             "--candidate-dir",
             str(candidates),
+            "--cache-root",
+            str(tmp_path / "cache"),
             "--write-lock",
             str(lock),
             "--fetch-official-bibtex",
@@ -653,6 +1061,35 @@ def test_monitor_official_records_plans_arxiv_fallback_reruns(tmp_path, capsys):
                         "resolver": {"score": 100, "blocking_issues": [], "warnings": [], "decision_trace": []},
                         "checked_at": "2026-05-20",
                     },
+                    {
+                        "citation_key": "manual2026",
+                        "short_title": "Manual Fixture",
+                        "status": "verified_manual_fallback",
+                        "record": {
+                            "title": "Manual Fixture",
+                            "authors": ["Ada Example"],
+                            "year": 2026,
+                            "venue": "Proceedings of the ACM Fixture Conference",
+                            "doi": "10.1145/fixture",
+                            "url": "https://doi.org/10.1145/fixture",
+                        },
+                        "authority": {
+                            "source": "crossref",
+                            "record_url": "https://doi.org/10.1145/fixture",
+                            "record_type": "publication_record",
+                            "source_priority": 2,
+                            "bibtex_url": None,
+                        },
+                        "bibtex": {
+                            "entry_type": "inproceedings",
+                            "citation_key": "manual2026",
+                            "source_kind": "publisher_metadata_manual_normalized",
+                            "raw_sha256": "abc",
+                            "normalized_sha256": "def",
+                        },
+                        "resolver": {"score": 100, "blocking_issues": [], "warnings": [], "decision_trace": []},
+                        "checked_at": "2026-05-20",
+                    },
                 ],
             }
         ),
@@ -664,13 +1101,27 @@ def test_monitor_official_records_plans_arxiv_fallback_reruns(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["status"] == "official_monitor_ready"
-    assert payload["data"]["plan"]["monitor_count"] == 1
+    assert payload["data"]["plan"]["monitor_count"] == 2
     item = payload["data"]["plan"]["items"][0]
     assert item["citation_key"] == "preprint2026"
     assert item["recommended_sources"] == ["crossref"]
+    assert item["discovery_searches"][0]["source"] == "google_scholar"
+    assert item["discovery_searches"][0]["authority_role"] == "discovery_only"
+    assert "scholar.google.com/scholar" in item["discovery_searches"][0]["url"]
+    assert "Google Scholar BibTeX" in item["discovery_searches"][0]["note"]
     assert "--citation-key preprint2026" in item["command"]
     assert "--fetch-official-bibtex" in item["command"]
+    assert "scholar-official-bridge" in item["scholar_bridge_command"]
+    assert "--live-scholar" in item["scholar_bridge_command"]
+    assert "SCHOLAR_HTML_DIR" in item["scholar_bridge_command"]
     assert payload["next_actions"][0]["network_required"] is True
+    assert payload["next_actions"][0]["discovery_searches"][0]["source"] == "google_scholar"
+    assert "scholar-official-bridge" in payload["next_actions"][0]["scholar_bridge_command"]
+    assert "--live-scholar" in payload["next_actions"][0]["scholar_bridge_command"]
+    manual_item = payload["data"]["plan"]["items"][1]
+    assert manual_item["citation_key"] == "manual2026"
+    assert "acm" in manual_item["recommended_sources"]
+    assert "--fetch-official-bibtex" in manual_item["command"]
 
 
 def test_reference_check_live_failure_returns_json_blocker(monkeypatch, tmp_path, capsys):
@@ -708,7 +1159,7 @@ def test_reference_check_live_failure_returns_json_blocker(monkeypatch, tmp_path
     html_action = next(action for action in payload["next_actions"] if action["code"] == "ADD_OFFICIAL_HTML_FIXTURE")
     assert html_action["kind"] == "official_html_fixture_input"
     assert html_action["network_required"] is False
-    assert html_action["requires_human_review"] is True
+    assert html_action["requires_review"] is True
     assert "--fixture-html-dir OFFICIAL_HTML_DIR" in html_action["command"]
     assert html_action["fixture_html_file_examples"] == [
         "debenedetti2024agentdojo.acm.html",
@@ -742,7 +1193,7 @@ def test_reference_check_suggests_candidate_files_when_missing(tmp_path, capsys)
     assert any(issue["code"] == "REFERENCE_CANDIDATES_MISSING" for issue in payload["blocking_issues"])
     assert payload["next_actions"][0]["code"] == "ADD_REFERENCE_CANDIDATES"
     assert payload["next_actions"][0]["kind"] == "reference_candidate_input"
-    assert payload["next_actions"][0]["requires_human_review"] is True
+    assert payload["next_actions"][0]["requires_review"] is True
     assert payload["next_actions"][0]["candidate_file"].endswith("debenedetti2024agentdojo.json")
 
 
@@ -786,7 +1237,7 @@ def test_reference_check_suggests_review_for_low_confidence_candidate(tmp_path, 
     assert any(issue["code"] == "LOW_CONFIDENCE" for issue in payload["blocking_issues"])
     assert payload["next_actions"][0]["code"] == "REVIEW_REFERENCE_CANDIDATE"
     assert payload["next_actions"][0]["kind"] == "reference_candidate_review"
-    assert payload["next_actions"][0]["requires_human_review"] is True
+    assert payload["next_actions"][0]["requires_review"] is True
     assert payload["next_actions"][0]["candidate_file"].endswith("debenedetti2024agentdojo.json")
     assert payload["next_actions"][0]["blocking_code"] == "LOW_CONFIDENCE"
 
@@ -874,10 +1325,15 @@ def test_reference_check_suggests_official_bibtex_fixture_when_fetch_fails(monke
     assert any(issue["code"] == "OFFICIAL_BIBTEX_FETCH_FAILED" for issue in payload["blocking_issues"])
     action = next(action for action in payload["next_actions"] if action["code"] == "ADD_OFFICIAL_BIBTEX_FIXTURE")
     assert action["kind"] == "official_bibtex_fixture_input"
-    assert action["requires_human_review"] is True
+    assert action["requires_review"] is True
     assert action["network_required"] is False
     assert action["official_bibtex_url"].endswith("/bibtex")
     assert any(example.endswith("debenedetti2024agentdojo.neurips.bib") for example in action["official_bibtex_file_examples"])
+    guide = action["manual_official_bibtex_instructions"]
+    assert guide["official_bibtex_url"].endswith("/bibtex")
+    assert guide["save_as"] == action["official_bibtex_file_examples"]
+    assert "Google Scholar BibTeX" in guide["do_not_use"]
+    assert any("Rerun the attached reference-check command" in step for step in guide["steps"])
     assert "--official-bibtex-dir OFFICIAL_BIBTEX_DIR" in action["command"]
 
 
@@ -914,7 +1370,7 @@ def test_claim_source_check_uses_citation_source_map_without_auto_checking(tmp_p
     assert "consistency" not in payload["data"]
     assert rows[0]["status"] == "needs_review"
     assert rows[0]["source_location"] == "agentdojo source text: paragraph 3"
-    assert "direct source review required" in rows[0]["notes"]
+    assert "source-evidence review required" in rows[0]["notes"]
     assert "coverage" in rows[0]["notes"]
     assert payload["data"]["suggestions"][0]["coverage"] > 0
     assert "refgate" in payload["data"]["suggestions"][0]["matched_terms"]

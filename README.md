@@ -24,7 +24,7 @@ instructions that call the CLI.
   `sync-bibtex`, `publish-check`, `paper-agents-template`, and `render-report`
   command surface
 - `run-next` planner/executor for structured `next_actions` with dry-run by
-  default and explicit gates for network, file writes, and human-review actions
+  default and explicit gates for network, file writes, and review actions
 - `run-summary` for compact next-action manifest review after dogfood or
   meta-harness runs
 - Deterministic resolver for official records, arXiv fallback, and ambiguous
@@ -82,7 +82,8 @@ instructions that call the CLI.
 - Generic paper repo instruction template generator
 - CI workflow for pytest and compile checks
 - Repo-local Codex plugin package and marketplace catalog
-- Claude Code command pack, project guidance, and opt-in hook example
+- Claude Code plugin package, marketplace catalog, project guidance, and
+  post-edit reminder hook
 - Plugin icon and CLI preview assets for broader catalog distribution
 - Fixture tests that run without network
 
@@ -138,9 +139,10 @@ python -m refgate sync-bibtex --bib references.bib --lock refgate.lock.json --js
 python -m refgate sync-bibtex --bib references.bib --lock refgate.lock.json --output references.refgate.bib --json
 python -m refgate monitor-official-records --lock refgate.lock.json --json
 python -m refgate monitor-official-records --lock refgate.lock.json --cache-root .refgate/cache --write-lock refgate.lock.json --live --json
+python -m refgate scholar-official-bridge --lock refgate.lock.json --scholar-html-dir .refgate/scholar-html --candidate-dir .refgate/reference-candidates --live-scholar --live-official --write-candidates --write-lock refgate.lock.json --fetch-official-bibtex --json
 python -m refgate run-next --from path/to/paper_audit.json --json
 python -m refgate run-next --from path/to/paper_audit.json --output-plan .refgate/next_plan.json --json
-python -m refgate run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-human-review --json
+python -m refgate run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-review --json
 python -m refgate run-next --from path/to/paper_audit.json --allow-writes --max-actions 1 --execute --json
 python -m refgate run-next --from path/to/paper_audit.json --allow-writes --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
 python -m refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
@@ -167,7 +169,7 @@ into `accepted_provenance_notes` so agents do not treat them as new work.
 Its `next_actions` field gives deterministic follow-up commands for the current
 state, such as resolving reference provenance, adding citation-key named source
 files, reviewing no-match claims, or exporting a handoff artifact after a clean
-audit. Each action includes `kind`, `requires_human_review`, `writes_files`, and
+audit. Each action includes `kind`, `requires_review`, `writes_files`, and
 `network_required` fields for agent execution planning.
 For reference provenance, `paper-audit` also includes agent-ready follow-up
 commands for both reviewed offline inputs and opt-in live lookup, including
@@ -207,12 +209,19 @@ For multi-file manuscripts, the `--tex` root may include other files with
 root TeX directory, adds `.tex` when omitted, and records source-file/line hints
 in generated claim rows. Missing includes block submission mode and warn in
 non-submission mode.
+For standalone roots that do not include each other, repeat `--extra-tex` on
+`paper-audit` or `claim-stubs`, for example
+`paper-audit --tex paper/main.tex --extra-tex paper/supplementary.tex ...`.
+Citation consistency and generated claim stubs then use the union of both TeX
+source graphs; the existing single-`--tex` behavior is unchanged.
 
 `reference-check` and `claim-source-check` are for real manuscript verification,
 not only tool regression tests. Use `reference-check` with reviewed candidate
 records and official BibTeX files to fill lockfile provenance. Official BibTeX
 files are matched by citation-key filename first and exact normalized title
-second; title or DOI mismatches block lockfile updates. Use `claim-source-check`
+second. When the authority record has a DOI, the official fixture must contain
+the same normalized DOI; missing or mismatched DOI values block lockfile
+updates. Use `claim-source-check`
 with a TSV/JSON source map that links citation keys to extracted source text or
 PDFs; it may fill evidence suggestions with overlap, coverage, matched terms,
 missing terms, and page-aware source locations, but it leaves claims in
@@ -258,13 +267,30 @@ lockfile canonical BibTeX text. It is network-free, JSON-first, dry-run by
 default, and refuses to synthesize entries when the lockfile lacks canonical
 BibTeX text. Written output preserves a blank line between BibTeX entries so
 agents can review the candidate file before in-place replacement.
+`paper-audit --submission` emits `ARXIV_OFFICIAL_RECORD_MONITOR_REQUIRED`
+for verified arXiv fallback entries so they do not silently pass when an
+official venue record may exist.
+
 Use `monitor-official-records` on a lockfile to find arXiv fallback or
 official-record-pending rows and generate targeted official-source
 `reference-check` commands. It is network-free by default; add `--live` only
 when you want Refgate to run those checks against opt-in live sources.
+The monitor also emits Google Scholar discovery links and a
+`scholar-official-bridge` command. Scholar is discovery-only: use `--live-scholar`
+or saved Scholar result HTML to find official venue/publisher URLs, then let
+Refgate fetch those official URLs, write candidate records, and run
+`reference-check --candidate-dir ... --fetch-official-bibtex` for final
+provenance. Live Scholar fetching is best-effort; if it is blocked, save the
+Scholar result HTML under `.refgate/scholar-html/` and rerun the bridge.
+If Scholar returns a CAPTCHA or anti-automation page, Refgate emits
+`SCHOLAR_CAPTCHA_REVIEW_REQUIRED` with both the browser URL and two review
+targets: save the resolved results to
+`.refgate/scholar-html/<citation_key>.google_scholar.html`, or paste one
+official venue/publisher URL per line into
+`.refgate/scholar-html/<citation_key>.official_urls.txt`.
 Use `run-next` to inspect these actions without executing them. It only executes
 when `--execute` is present, and it skips actions unless the corresponding
-`--allow-network`, `--allow-writes`, or `--allow-human-review` gate is enabled.
+`--allow-network`, `--allow-writes`, or `--allow-review` gate is enabled.
 It also skips commands that still contain placeholders such as `PAPER_BIB`,
 `SOURCES_DIR`, `OFFICIAL_BIBTEX_DIR`, or `REVIEWED_FALLBACK_BIBTEX_DIR` with
 `skip_reason=input_required`; replace those with reviewed local paths before
@@ -420,5 +446,5 @@ See `docs/paper_repo_ci.md` for paper repository CI setup.
 See `docs/live_smoke_reviewed_manifest.md` for reviewed live smoke evidence.
 See `docs/codex_plugin_distribution.md` for the Codex plugin package and
 marketplace notes.
-See `docs/claude_code.md` for the Claude Code command pack and optional hook
-setup.
+See `docs/claude_code.md` for the Claude Code plugin install steps, slash
+command names, and post-edit reminder hook.

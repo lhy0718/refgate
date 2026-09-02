@@ -43,11 +43,12 @@ from .paper_flow import build_source_map_from_dir, run_paper_audit
 from .publish_check import run_publish_check
 from .reference_check import run_reference_check
 from .reports import render_markdown_report
+from .scholar import build_scholar_official_bridge_plan
 from .resolver import resolve
 from .source_text import build_vision_extraction_plan, validate_source_text
 from .source_title import check_source_titles, source_title_next_actions
 from .source_download import download_sources
-from .tex import load_tex_document
+from .tex import load_tex_documents
 from .adapters.acl import AclAdapter, candidate_from_acl_html
 from .adapters.arxiv import ArxivAdapter
 from .adapters.crossref import CrossrefAdapter
@@ -490,7 +491,7 @@ def cmd_sync_bibtex(args: argparse.Namespace) -> int:
                 "message": "Write the planned BibTeX synchronization to an output file.",
                 "command": " ".join(command_parts),
                 "network_required": False,
-                "requires_human_review": False,
+                "requires_review": False,
                 "writes_files": True,
             }
         )
@@ -522,7 +523,7 @@ def cmd_sync_bibtex(args: argparse.Namespace) -> int:
                 "message": "Refresh official-export lock entries so sync-bibtex has canonical BibTeX text.",
                 "command": " ".join(command_parts),
                 "network_required": True,
-                "requires_human_review": False,
+                "requires_review": False,
                 "writes_files": True,
             }
         )
@@ -554,7 +555,7 @@ def cmd_sync_bibtex(args: argparse.Namespace) -> int:
                 "message": "Add reviewed fallback BibTeX files and refresh lock entries so sync-bibtex has canonical text.",
                 "command": " ".join(command_parts),
                 "network_required": False,
-                "requires_human_review": True,
+                "requires_review": True,
                 "writes_files": True,
             }
         )
@@ -631,7 +632,7 @@ def cmd_claim_source_check(args: argparse.Namespace) -> int:
 
 
 def cmd_claim_stubs(args: argparse.Namespace) -> int:
-    tex_document = load_tex_document(args.tex)
+    tex_document = load_tex_documents([args.tex, *(args.extra_tex or [])])
     stubs = update_claim_stub_file_from_sources(
         [{"source_file": source.display_path, "text": source.text} for source in tex_document.sources],
         args.output,
@@ -697,7 +698,10 @@ def cmd_audit(args: argparse.Namespace) -> int:
     bibliography_audit = audit_bibliography_result(bib_text, lockfile, submission=args.submission)
     issues = list(bibliography_audit.issues)
     if args.tex:
-        tex_document = load_tex_document(args.tex, submission=args.submission)
+        tex_document = load_tex_documents(
+            [args.tex, *(args.extra_tex or [])],
+            submission=args.submission,
+        )
         issues.extend(tex_document.issues)
         issues.extend(audit_tex_bib_consistency(tex_document.combined_text, bib_text, submission=args.submission))
     if args.claims:
@@ -772,7 +776,14 @@ def cmd_bootstrap_lock(args: argparse.Namespace) -> int:
 
 
 def cmd_bootstrap_paper(args: argparse.Namespace) -> int:
-    result = bootstrap_paper(args.tex, args.bib, args.lock_output, args.claims_output, project=args.project)
+    result = bootstrap_paper(
+        args.tex,
+        args.bib,
+        args.lock_output,
+        args.claims_output,
+        project=args.project,
+        extra_tex=args.extra_tex,
+    )
     write_json(envelope("paper_bootstrapped", data=result))
     return 0
 
@@ -849,6 +860,32 @@ def cmd_reference_check(args: argparse.Namespace) -> int:
     return 0 if result["ok"] else 1
 
 
+def cmd_scholar_official_bridge(args: argparse.Namespace) -> int:
+    result = build_scholar_official_bridge_plan(
+        args.lock,
+        scholar_html_dir=args.scholar_html_dir,
+        candidate_dir=args.candidate_dir,
+        cache_root=args.cache_root,
+        prefer_cache=args.prefer_cache,
+        write_candidates=args.write_candidates,
+        live_official=args.live_official,
+        live_scholar=args.live_scholar,
+        write_lock=args.write_lock,
+        fetch_official_bibtex=args.fetch_official_bibtex,
+        max_entries=args.max_entries,
+        citation_keys=args.citation_key,
+    )
+    write_json(
+        envelope(
+            "scholar_official_bridge_complete",
+            data={key: value for key, value in result.items() if key not in {"blocking_issues", "next_actions"}},
+            blocking_issues=result["blocking_issues"],
+            next_actions=result["next_actions"],
+        )
+    )
+    return 0 if not result["blocking_issues"] else 1
+
+
 def cmd_monitor_official_records(args: argparse.Namespace) -> int:
     result = run_official_monitor(
         args.lock,
@@ -856,7 +893,7 @@ def cmd_monitor_official_records(args: argparse.Namespace) -> int:
         cache_root=args.cache_root,
         prefer_cache=args.prefer_cache,
         write_lock=args.write_lock,
-        fetch_official_bibtex=not args.no_fetch_official_bibtex,
+        fetch_official_bibtex=args.fetch_official_bibtex,
         max_entries=args.max_entries,
         live=args.live,
     )
@@ -880,7 +917,7 @@ def cmd_run_next(args: argparse.Namespace) -> int:
             args.from_json,
             allow_network=args.allow_network,
             allow_writes=args.allow_writes,
-            allow_human_review=args.allow_human_review,
+            allow_review=args.allow_review,
             max_actions=args.max_actions,
             command_field=args.command_field,
             execute=False,
@@ -890,7 +927,7 @@ def cmd_run_next(args: argparse.Namespace) -> int:
         args.from_json,
         allow_network=args.allow_network,
         allow_writes=args.allow_writes,
-        allow_human_review=args.allow_human_review,
+        allow_review=args.allow_review,
         max_actions=args.max_actions,
         command_field=args.command_field,
         execute=args.execute,
@@ -1233,7 +1270,7 @@ def cmd_download_sources(args: argparse.Namespace) -> int:
             {
                 "code": "DOWNLOAD_SOURCES_LIVE",
                 "kind": "source_download",
-                "requires_human_review": False,
+                "requires_review": False,
                 "writes_files": True,
                 "network_required": True,
                 "message": "Run the same command with --live to download planned source PDFs.",
@@ -1355,6 +1392,7 @@ def cmd_paper_audit(args: argparse.Namespace) -> int:
         allow_blocking_handoff=args.allow_blocking_handoff,
         update_claims=args.update_claims,
         include_work_items=args.include_work_items,
+        extra_tex=args.extra_tex,
     )
     if args.next_plan_output:
         plan = build_next_actions_result(
@@ -1510,6 +1548,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     claim_stubs_parser = subparsers.add_parser("claim-stubs")
     claim_stubs_parser.add_argument("--tex", required=True)
+    claim_stubs_parser.add_argument("--extra-tex", action="append", default=[])
     claim_stubs_parser.add_argument("--output", required=True)
     claim_stubs_parser.add_argument("--json", action="store_true")
     claim_stubs_parser.set_defaults(func=cmd_claim_stubs)
@@ -1543,6 +1582,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     full_audit_parser = subparsers.add_parser("audit")
     full_audit_parser.add_argument("--tex")
+    full_audit_parser.add_argument("--extra-tex", action="append", default=[])
     full_audit_parser.add_argument("--bib", required=True)
     full_audit_parser.add_argument("--lock", required=True)
     full_audit_parser.add_argument("--claims")
@@ -1571,6 +1611,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     bootstrap_paper_parser = subparsers.add_parser("bootstrap-paper")
     bootstrap_paper_parser.add_argument("--tex", required=True)
+    bootstrap_paper_parser.add_argument("--extra-tex", action="append", default=[])
     bootstrap_paper_parser.add_argument("--bib", required=True)
     bootstrap_paper_parser.add_argument("--lock-output", required=True)
     bootstrap_paper_parser.add_argument("--claims-output", required=True)
@@ -1615,17 +1656,35 @@ def build_parser() -> argparse.ArgumentParser:
     monitor_parser.add_argument("--cache-root", default=".refgate/cache")
     monitor_parser.add_argument("--prefer-cache", action="store_true")
     monitor_parser.add_argument("--write-lock")
-    monitor_parser.add_argument("--no-fetch-official-bibtex", action="store_true")
+    monitor_parser.add_argument("--fetch-official-bibtex", dest="fetch_official_bibtex", action="store_true", default=True)
+    monitor_parser.add_argument("--no-fetch-official-bibtex", dest="fetch_official_bibtex", action="store_false")
     monitor_parser.add_argument("--max-entries", type=int)
     monitor_parser.add_argument("--live", action="store_true")
     monitor_parser.add_argument("--json", action="store_true")
     monitor_parser.set_defaults(func=cmd_monitor_official_records)
 
+    scholar_bridge_parser = subparsers.add_parser("scholar-official-bridge")
+    scholar_bridge_parser.add_argument("--lock", required=True)
+    scholar_bridge_parser.add_argument("--scholar-html-dir", required=True)
+    scholar_bridge_parser.add_argument("--candidate-dir", required=True)
+    scholar_bridge_parser.add_argument("--cache-root", default=".refgate/cache")
+    scholar_bridge_parser.add_argument("--prefer-cache", action="store_true")
+    scholar_bridge_parser.add_argument("--write-candidates", action="store_true")
+    scholar_bridge_parser.add_argument("--live-scholar", action="store_true")
+    scholar_bridge_parser.add_argument("--live-official", action="store_true")
+    scholar_bridge_parser.add_argument("--write-lock")
+    scholar_bridge_parser.add_argument("--fetch-official-bibtex", dest="fetch_official_bibtex", action="store_true", default=True)
+    scholar_bridge_parser.add_argument("--no-fetch-official-bibtex", dest="fetch_official_bibtex", action="store_false")
+    scholar_bridge_parser.add_argument("--max-entries", type=int)
+    scholar_bridge_parser.add_argument("--citation-key", action="append")
+    scholar_bridge_parser.add_argument("--json", action="store_true")
+    scholar_bridge_parser.set_defaults(func=cmd_scholar_official_bridge)
+
     run_next_parser = subparsers.add_parser("run-next")
     run_next_parser.add_argument("--from", dest="from_json", required=True)
     run_next_parser.add_argument("--allow-network", action="store_true")
     run_next_parser.add_argument("--allow-writes", action="store_true")
-    run_next_parser.add_argument("--allow-human-review", action="store_true")
+    run_next_parser.add_argument("--allow-review", action="store_true")
     run_next_parser.add_argument("--max-actions", type=int)
     run_next_parser.add_argument("--command-field", default="command")
     run_next_parser.add_argument("--execute", action="store_true")
@@ -1737,6 +1796,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     paper_audit_parser = subparsers.add_parser("paper-audit")
     paper_audit_parser.add_argument("--tex", required=True)
+    paper_audit_parser.add_argument("--extra-tex", action="append", default=[])
     paper_audit_parser.add_argument("--bib", required=True)
     paper_audit_parser.add_argument("--lock", default="refgate.lock.json")
     paper_audit_parser.add_argument("--claims", default="refgate_claims.tsv")

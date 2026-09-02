@@ -49,7 +49,7 @@ If reviewed official HTML, official BibTeX, or manual fallback files have been
 added, execute the reference-check action only after inspecting the plan:
 
 ```bash
-{command} run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-human-review --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
+{command} run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-review --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
 {command} run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
 ```
 
@@ -136,7 +136,7 @@ jobs:
 - Abstracts, summaries, and metadata snippets are weak evidence only.
 - Prefer full-source body passages over title-like or abstract-like snippets
   when reviewing Codex bundle candidates.
-- Keep final claim status in the TSV; evidence suggestions require human review.
+- Keep final claim status in the TSV; evidence suggestions require review.
 - If a Refgate command returns `ok=false`, report the blocker or keep following
   safe next actions; do not call the paper verified.
 """

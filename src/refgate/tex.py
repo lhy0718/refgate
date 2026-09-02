@@ -126,3 +126,32 @@ def load_tex_document(
 
     visit(root, 0)
     return TexDocument(root=root, sources=sources, issues=issues)
+
+
+def load_tex_documents(
+    tex_paths: list[str | Path],
+    *,
+    submission: bool = False,
+    max_depth: int = MAX_TEX_INCLUDE_DEPTH,
+) -> TexDocument:
+    """Load multiple standalone TeX roots and return their source union."""
+
+    if not tex_paths:
+        raise ValueError("At least one TeX root is required")
+
+    documents = [
+        load_tex_document(path, submission=submission, max_depth=max_depth)
+        for path in tex_paths
+    ]
+    sources: list[TexSource] = []
+    issues: list[AuditIssue] = []
+    seen: set[Path] = set()
+    for document in documents:
+        issues.extend(document.issues)
+        for source in document.sources:
+            resolved = source.path.resolve(strict=False)
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            sources.append(source)
+    return TexDocument(root=documents[0].root, sources=sources, issues=issues)

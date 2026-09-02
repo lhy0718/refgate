@@ -1,12 +1,19 @@
 # Claude Code Integration
 
-Refgate includes a Claude Code command pack, a project `CLAUDE.md`, and an
-opt-in hook example. This integration keeps Refgate CLI-first: Claude Code
-receives workflow prompts, while the executable verification engine remains the
-`refgate` command.
+Refgate ships its Claude Code surface as a single plugin, `plugins/refgate`,
+plus a project `CLAUDE.md`. This integration keeps Refgate CLI-first: Claude
+Code receives workflow prompts, while the executable verification engine remains
+the `refgate` command.
+
+The plugin is the only supported Claude Code surface. Do not copy the command
+Markdown files into a project-level `.claude/commands/refgate/` directory; that
+duplicates every command under the same `refgate:` namespace. The same applies
+to a project-level copy of the reminder hook, which would fire twice.
+`tests/test_claude_code_plugin.py` fails if those superseded paths reappear.
 
 Official Claude Code references:
 
+- Plugins: https://docs.anthropic.com/en/docs/claude-code/plugins
 - Custom slash commands: https://docs.anthropic.com/en/docs/claude-code/slash-commands
 - Hooks: https://docs.anthropic.com/en/docs/claude-code/hooks
 - Settings: https://docs.anthropic.com/en/docs/claude-code/settings
@@ -14,24 +21,48 @@ Official Claude Code references:
 ## Included Files
 
 - `CLAUDE.md`: project guidance for Claude Code.
-- `.claude/commands/refgate/refgate-paper-audit.md`
-- `.claude/commands/refgate/refgate-reference-check.md`
-- `.claude/commands/refgate/refgate-claim-review.md`
-- `.claude/commands/refgate/refgate-run-next.md`
-- `.claude/commands/refgate/refgate-final-audit.md`
-- `.claude/commands/refgate/refgate-publish-check.md`
-- `.claude/hooks/refgate-post-edit-reminder.sh`
-- `.claude/settings.refgate.example.json`
+- `.claude-plugin/marketplace.json`: repo-local marketplace catalog.
+- `plugins/refgate/.claude-plugin/plugin.json`: plugin manifest.
+- `plugins/refgate/commands/refgate-paper-audit.md`
+- `plugins/refgate/commands/refgate-reference-check.md`
+- `plugins/refgate/commands/refgate-claim-review.md`
+- `plugins/refgate/commands/refgate-run-next.md`
+- `plugins/refgate/commands/refgate-final-audit.md`
+- `plugins/refgate/commands/refgate-publish-check.md`
+- `plugins/refgate/skills/refgate/SKILL.md`
+- `plugins/refgate/hooks/hooks.json`
+- `plugins/refgate/hooks/refgate-post-edit-reminder.sh`
 
-Claude Code derives project slash command names from Markdown filenames. The
+Claude Code namespaces plugin slash commands as `/<plugin>:<file-stem>`. The
 commands are therefore:
 
-- `/refgate-paper-audit`
-- `/refgate-reference-check`
-- `/refgate-claim-review`
-- `/refgate-run-next`
-- `/refgate-final-audit`
-- `/refgate-publish-check`
+- `/refgate:refgate-paper-audit`
+- `/refgate:refgate-reference-check`
+- `/refgate:refgate-claim-review`
+- `/refgate:refgate-run-next`
+- `/refgate:refgate-final-audit`
+- `/refgate:refgate-publish-check`
+
+## Installing The Plugin
+
+Add the marketplace catalog, then install:
+
+```bash
+claude plugin marketplace add lhy0718/refgate
+claude plugin install refgate@refgate-local
+```
+
+From a local checkout, point the marketplace at the checkout directory instead
+of the GitHub repository:
+
+```bash
+claude plugin marketplace add ./path/to/refgate
+```
+
+Installation copies `plugins/refgate` into a version-pinned cache directory. The
+cache is a snapshot, not a symlink, so edits under `plugins/refgate` take effect
+only after reinstalling or updating the plugin. Bump `version` in
+`plugins/refgate/.claude-plugin/plugin.json` when changing plugin contents.
 
 ## Using In A Paper Repository
 
@@ -48,9 +79,10 @@ For source-checkout use, install from the Refgate repository:
 python -m pip install -e ".[dev]"
 ```
 
-Then copy the command files and `CLAUDE.md` into a manuscript repository, or
-keep them in Refgate and ask Claude Code to call the installed `refgate`
-command from the paper repository.
+Then install the `refgate` plugin as above. The plugin is installed per user, so
+its commands, skill, and hook are available in every manuscript repository
+without copying files. Copy only `CLAUDE.md` into the manuscript repository when
+that repository needs the Refgate operating rules in its own project guidance.
 
 For a generic `.tex` plus `.bib` repository, start with:
 
@@ -72,7 +104,7 @@ When reviewed offline provenance inputs are ready, use the command field the
 plan provides:
 
 ```bash
-refgate run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-human-review --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
+refgate run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-review --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
 refgate run-summary --input .refgate/next_plan.json --input .refgate/next_run_log.json --markdown .refgate/next_summary.md --json
 ```
 
@@ -84,18 +116,17 @@ and line hints in `refgate_claims.tsv`, `refgate_audit.md`, and
 For CI, copy `examples/paper-repo/.github/workflows/refgate-paper-audit.yml`
 and keep `paper-audit` as the default entry point.
 
-## Optional Hook
+## Post-Edit Reminder Hook
 
-The included hook is a reminder, not an automatic verifier. To opt in, copy the
-example settings file to the project-local Claude Code settings file:
-
-```bash
-cp .claude/settings.refgate.example.json .claude/settings.local.json
-chmod +x .claude/hooks/refgate-post-edit-reminder.sh
-```
+The plugin registers a `PostToolUse` hook through
+`plugins/refgate/hooks/hooks.json`. Installing the plugin is the opt-in step;
+no settings file needs to be copied. Disabling or uninstalling the plugin
+removes the hook.
 
 After edits to manuscript, bibliography, lock, claim, or source-map files, the
-hook prints a reminder to rerun the relevant Refgate command.
+hook prints a reminder to rerun the relevant Refgate command. The hook is a
+reminder, not an automatic verifier: it never runs `refgate`, never writes
+files, and never blocks a tool call.
 
 ## Safety Rules
 

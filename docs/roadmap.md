@@ -20,7 +20,7 @@ Use Skills or project instructions for agent behavior:
 - block `.bib` edits when `ok=false`;
 - require claim-to-source evidence for important related-work and benchmark
   claims;
-- preserve warnings in reports for human review.
+- preserve warnings in reports for review.
 
 Do not add a server roadmap to the core project. If a future external client
 needs integration, it should call the CLI as an external wrapper and must not
@@ -63,7 +63,7 @@ become the source of truth.
 - `run-next` support for both raw command JSON responses and saved
   `next_actions` plan manifests
 - Agent-friendly `run-next` hints and top-level recommended next command
-- Markdown `run-summary` output for human review of agent next-action loops
+- Markdown `run-summary` output for review of agent next-action loops
 - Deterministic claim/evidence consistency review
 - Deterministic over-strong claim wording warning in claim/evidence review
 - Source bundle evidence suggestion across multiple reviewed text/PDF inputs

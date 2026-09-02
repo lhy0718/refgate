@@ -9,7 +9,7 @@ from typing import Any
 from .bibtex import parse_bibtex_entry, parse_bibtex_file, sha256_text, split_bibtex_entries
 from .claim_audit import update_claim_stub_file_from_sources
 from .models import LockEntry, Lockfile
-from .tex import load_tex_document
+from .tex import load_tex_documents
 
 
 def _authors(value: str) -> list[str]:
@@ -122,9 +122,10 @@ def bootstrap_paper(
     claims_output: str | Path,
     *,
     project: str | None = None,
+    extra_tex: list[str | Path] | None = None,
 ) -> dict[str, Any]:
     lock_result = bootstrap_lock_from_bib(bib_path, lock_output, project=project)
-    tex_document = load_tex_document(tex_path)
+    tex_document = load_tex_documents([tex_path, *(extra_tex or [])])
     stubs = update_claim_stub_file_from_sources(
         [{"source_file": source.display_path, "text": source.text} for source in tex_document.sources],
         claims_output,

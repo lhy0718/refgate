@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .bibtex import parse_bibtex_file, sha256_text, split_bibtex_entries
+from .bibtex import (
+    bibtex_entries_semantically_equal,
+    parse_bibtex_file,
+    sha256_text,
+    split_bibtex_entries,
+)
 from .models import AuditIssue, Lockfile
 from .resolver import normalize_author, normalize_title
 
@@ -78,6 +83,23 @@ def _is_verified_arxiv_fallback(lock_entry, source_kind: str) -> bool:
     )
 
 
+def _arxiv_official_record_monitor_issue(lock_entry) -> AuditIssue:
+    evidence = []
+    record_url = str(lock_entry.authority.get("record_url") or "").strip()
+    if record_url:
+        evidence.append(record_url)
+    arxiv_id = str(lock_entry.record.get("arxiv_id") or "").strip()
+    if arxiv_id:
+        evidence.append(f"arXiv:{arxiv_id}")
+    return AuditIssue(
+        code="ARXIV_OFFICIAL_RECORD_MONITOR_REQUIRED",
+        message="Verified arXiv fallback should be refreshed against official venue records before submission.",
+        severity="warning",
+        citation_key=lock_entry.citation_key,
+        evidence=evidence,
+    )
+
+
 def _has_reviewed_manual_fallback(lock_entry, source_kind: str) -> bool:
     return source_kind in FALLBACK_SOURCE_KINDS and bool(str(lock_entry.bibtex.get("fallback_reason") or "").strip())
 
@@ -95,6 +117,9 @@ def _has_verified_doi_absence(lock_entry, source_kind: str) -> bool:
 def audit_bibliography_result(bib_text: str, lockfile: Lockfile, submission: bool = False) -> BibliographyAuditResult:
     issues: list[AuditIssue] = []
     accepted_provenance_notes: list[AuditIssue] = []
+    audit_policy = lockfile.audit_policy or {}
+    allow_manual_fallback = bool(audit_policy.get("allow_manual_fallback", True))
+    allow_arxiv_fallback = bool(audit_policy.get("allow_arxiv_fallback", True))
     bib_entries = parse_bibtex_file(bib_text)
     raw_entries = {}
     for raw in split_bibtex_entries(bib_text):
@@ -136,6 +161,34 @@ def audit_bibliography_result(bib_text: str, lockfile: Lockfile, submission: boo
                     citation_key=citation_key,
                 )
             )
+        if source_kind == "publisher_metadata_manual_normalized" and not allow_manual_fallback:
+            evidence = []
+            record_url = str(lock_entry.authority.get("record_url") or "").strip()
+            if record_url:
+                evidence.append(record_url)
+            issues.append(
+                AuditIssue(
+                    code="MANUAL_FALLBACK_NOT_ALLOWED",
+                    message="Audit policy requires an official BibTeX export; publisher metadata manual fallback is not allowed.",
+                    severity="blocking",
+                    citation_key=citation_key,
+                    evidence=evidence,
+                )
+            )
+        if source_kind == "arxiv_manual_normalized" and not allow_arxiv_fallback:
+            evidence = []
+            record_url = str(lock_entry.authority.get("record_url") or "").strip()
+            if record_url:
+                evidence.append(record_url)
+            issues.append(
+                AuditIssue(
+                    code="ARXIV_FALLBACK_NOT_ALLOWED",
+                    message="Audit policy does not allow arXiv fallback provenance for this bibliography.",
+                    severity="blocking",
+                    citation_key=citation_key,
+                    evidence=evidence,
+                )
+            )
 
         official_url = lock_entry.authority.get("bibtex_url")
         if official_url and source_kind != "official_export":
@@ -146,7 +199,7 @@ def audit_bibliography_result(bib_text: str, lockfile: Lockfile, submission: boo
                 citation_key=citation_key,
                 evidence=[official_url],
             )
-            if _has_reviewed_manual_fallback(lock_entry, source_kind):
+            if allow_manual_fallback and _has_reviewed_manual_fallback(lock_entry, source_kind):
                 accepted_provenance_notes.append(official_export_not_used)
             else:
                 issues.append(
@@ -161,17 +214,9 @@ def audit_bibliography_result(bib_text: str, lockfile: Lockfile, submission: boo
         if source_kind == "official_export":
             stored_hash = lock_entry.bibtex.get("normalized_sha256")
             current_raw = raw_entries.get(citation_key)
-            current_hash = sha256_text(current_raw.strip() + "\n") if current_raw else None
-            if stored_hash and stored_hash != "placeholder" and current_hash and stored_hash != current_hash:
-                issues.append(
-                    AuditIssue(
-                        code="OFFICIAL_EXPORT_CONTENT_CHANGED",
-                        message="Current BibTeX entry differs from the reviewed official export checksum.",
-                        severity="blocking" if submission else "warning",
-                        citation_key=citation_key,
-                    )
-                )
-            elif not stored_hash or stored_hash == "placeholder":
+            canonical_value = str(lock_entry.bibtex.get("canonical_text") or "").strip()
+            canonical_text = canonical_value + "\n" if canonical_value else None
+            if not stored_hash or stored_hash == "placeholder":
                 issues.append(
                     AuditIssue(
                         code="OFFICIAL_EXPORT_CHECKSUM_MISSING",
@@ -180,6 +225,35 @@ def audit_bibliography_result(bib_text: str, lockfile: Lockfile, submission: boo
                         citation_key=citation_key,
                     )
                 )
+            elif canonical_text and stored_hash != sha256_text(canonical_text):
+                issues.append(
+                    AuditIssue(
+                        code="OFFICIAL_EXPORT_CONTENT_CHANGED",
+                        message="Lockfile canonical BibTeX differs from the reviewed official export checksum.",
+                        severity="blocking" if submission else "warning",
+                        citation_key=citation_key,
+                    )
+                )
+            elif canonical_text and current_raw and not bibtex_entries_semantically_equal(current_raw, canonical_text):
+                issues.append(
+                    AuditIssue(
+                        code="OFFICIAL_EXPORT_CONTENT_CHANGED",
+                        message="Current BibTeX entry differs bibliographically from the reviewed official export.",
+                        severity="blocking" if submission else "warning",
+                        citation_key=citation_key,
+                    )
+                )
+            elif not canonical_text and current_raw:
+                current_hash = sha256_text(current_raw.strip() + "\n")
+                if stored_hash != current_hash:
+                    issues.append(
+                        AuditIssue(
+                            code="OFFICIAL_EXPORT_CONTENT_CHANGED",
+                            message="Current BibTeX entry differs from the reviewed official export checksum.",
+                            severity="blocking" if submission else "warning",
+                            citation_key=citation_key,
+                        )
+                    )
 
         expected_title = lock_entry.record.get("title")
         actual_title = bib_entry.get("title")
@@ -251,6 +325,7 @@ def audit_bibliography_result(bib_text: str, lockfile: Lockfile, submission: boo
             )
             if _is_verified_arxiv_fallback(lock_entry, source_kind):
                 accepted_provenance_notes.append(arxiv_fallback_issue)
+                issues.append(_arxiv_official_record_monitor_issue(lock_entry))
             else:
                 issues.append(arxiv_fallback_issue)
 

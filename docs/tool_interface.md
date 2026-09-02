@@ -60,14 +60,17 @@ Every JSON command should return or embed:
 provenance notes are separate: commands such as `audit-bib`, `audit`, and
 `paper-audit` may return `accepted_provenance_notes` for reviewed arXiv
 fallbacks or reviewed DOI absence recorded in the lockfile. Agents should
-report those notes as provenance evidence, not as work items, unless the user
-asks for a fresh live official-record refresh.
+report those notes as provenance evidence, not as blockers. Verified arXiv
+fallbacks can still produce `ARXIV_OFFICIAL_RECORD_MONITOR_REQUIRED` warnings;
+those warnings are unresolved official-record refresh work before submission.
+
+Google Scholar discovery links may appear in official-record monitor plans, but they are search aids rather than official provenance sources. Use `scholar-official-bridge --live-scholar` or saved Scholar result HTML to turn Scholar-discovered official venue/publisher URLs into candidate records, then continue through `reference-check` for final BibTeX provenance. If live Scholar fetching is blocked or returns a CAPTCHA page, Refgate emits `SCHOLAR_CAPTCHA_REVIEW_REQUIRED`: complete review in a browser, then either save the resolved result HTML as `.refgate/scholar-html/<citation_key>.google_scholar.html` or paste one official venue/publisher URL per line into `.refgate/scholar-html/<citation_key>.official_urls.txt`.
 
 For `paper-audit`, `next_actions` is actionable rather than decorative. It may
 include commands such as `resolver-assist`, a rerun with `--source-dir`, claim
 review pointers, or `export-handoff` when the audit is clean. Agents should
 prefer these returned actions over inventing follow-up commands from scratch.
-Each action includes `kind`, `requires_human_review`, `writes_files`, and
+Each action includes `kind`, `requires_review`, `writes_files`, and
 `network_required` so agents can decide whether to execute, ask for review, or
 request network permission.
 Reference-provenance actions include both an offline reviewed-input command and
@@ -77,7 +80,7 @@ path. The offline path includes `fixture_html_dir`, `fixture_html_naming`, and
 fallback BibTeX.
 `run-next --from OUTPUT.json --json` reads those actions and returns an
 execution plan without running anything. Add `--execute` plus the relevant
-allow flags (`--allow-network`, `--allow-writes`, `--allow-human-review`) to run
+allow flags (`--allow-network`, `--allow-writes`, `--allow-review`) to run
 selected safe actions. Commands with unresolved placeholders such as
 `PAPER_BIB`, `SOURCES_DIR`, `OFFICIAL_BIBTEX_DIR`, or
 `REVIEWED_FALLBACK_BIBTEX_DIR` are reported as `skip_reason=input_required`
@@ -96,7 +99,7 @@ Publisher-specific reference actions also retain compact `action_summary`,
 `run-summary --input PLAN.json --input RUN.json --json` reads those manifests
 and reports only remaining actions: failed commands, skipped actions, or
 planned actions that have not yet been executed. Add `--markdown SUMMARY.md`
-to write a compact human-reviewable summary alongside the JSON response.
+to write a compact reviewable summary alongside the JSON response.
 
 Network-backed tools should accept fixture or cached raw responses during tests.
 Live checks are opt-in and must not run in the default validation suite.
@@ -106,7 +109,7 @@ Skill-level agent rules should decide when to call these commands:
 - do not edit `.bib` when `ok=false`;
 - do not hand off bibliography artifacts while blocking issues remain;
 - treat warnings as unresolved review items;
-- treat accepted provenance notes as verified evidence records, not blockers;
+- treat accepted provenance notes as verified evidence records, not blockers, while still surfacing official-record refresh warnings for verified arXiv fallback entries;
 - keep lockfile and Markdown report as the persistent evidence layer.
 
 Current CLI coverage:
@@ -242,7 +245,7 @@ text or PDFs, then Refgate fills evidence candidates and blocks submission
 until the claim status is final.
 Use `--rerank semantic-lite` for deterministic phrase/coverage-aware evidence
 ranking. It does not call an external model and still leaves final claim status
-to human review.
+to review.
 The source map may include `evidence_kind` (or `source_kind`) for each source.
 Weak kinds such as `abstract`, `summary`, `metadata_summary`,
 `semantic_scholar_abstract`, `openalex_abstract`, and `arxiv_summary` are
@@ -257,7 +260,7 @@ By default it returns a compact consistency summary; use
 low claim/evidence overlap, non-final claim status, and over-strong claim
 wording that needs careful source support during submission mode.
 `evidence-suggest-bundle` chooses the best source block across multiple
-reviewed text/PDF files and still leaves claims in human-review status. For
+reviewed text/PDF files and still leaves claims in review status. For
 extractable PDFs, source locations preserve page labels when the text extractor
 provides them.
 PDF extraction requires the optional `pypdf` dependency. If source-map or
@@ -308,10 +311,12 @@ default; `--allow-checked` is required before non-weak evidence can become
 Generic paper bootstrap commands:
 
 - `paper-audit --tex paper.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --report refgate_audit.md --resolver-output refgate_queries.json --next-plan-output .refgate/next_plan.json --submission --json`
+- `paper-audit --tex paper/main.tex --extra-tex paper/supplementary.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --submission --json`
 - `paper-audit --tex paper.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --source-dir sources --source-map-output refgate_source_map.tsv --claim-review-output refgate_claim_review.md --submission --json`
 - `paper-audit --tex paper.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --frozen --submission --json`
 - `bootstrap-paper --tex paper.tex --bib references.bib --lock-output refgate.lock.json --claims-output refgate_claims.tsv --json`
 - `bootstrap-lock --bib references.bib --output refgate.lock.json --json`
+- `claim-stubs --tex paper/main.tex --extra-tex paper/supplementary.tex --output refgate_claims.tsv --json`
 - `resolver-assist --lock refgate.lock.json --output refgate_queries.json --json`
 - `paper-agents-template --tex paper.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --report refgate_audit.md --output AGENTS.refgate.md --json`
 - `export-review-bundle --tex paper.tex --bib references.bib --lock refgate.lock.json --claims refgate_claims.tsv --source-dir sources --output .refgate/codex_review_bundle.json --markdown .refgate/codex_review_bundle.md --json`

@@ -489,7 +489,7 @@ def source_title_next_actions(result: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "code": "REVIEW_SOURCE_TITLE_MISMATCH",
                 "kind": "source_integrity_review",
-                "requires_human_review": True,
+                "requires_review": True,
                 "writes_files": False,
                 "network_required": False,
                 "message": "Review mapped source files whose first-page title does not match the lockfile title; replace the source file or repair the lock/BibTeX only after official provenance review.",

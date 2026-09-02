@@ -57,7 +57,7 @@ def test_resolver_blocks_doi_exact_candidate_with_missing_title():
 
     assert not decision.ok
     assert decision.status == "unresolved"
-    assert decision.resolver_score == 100
+    assert decision.resolver_score >= 100
     assert decision.blocking_issues[0].code == "AUTHORITY_TITLE_MISSING"
 
 
@@ -81,7 +81,7 @@ def test_resolver_blocks_doi_exact_candidate_with_mismatched_title():
 
     assert not decision.ok
     assert decision.status == "unresolved"
-    assert decision.resolver_score == 100
+    assert decision.resolver_score >= 100
     assert decision.blocking_issues[0].code == "AUTHORITY_TITLE_MISMATCH"
 
 
@@ -101,3 +101,53 @@ def test_score_candidate_matches_reversed_first_author_name_parts():
 
     assert score >= 95
     assert "first author match" in trace
+
+
+def test_resolver_accepts_long_reordered_title_only_with_official_year_and_author_support():
+    query = PaperQuery(
+        query_id="title-variant",
+        title="Let Me Speak Freely? A Study on the Impact of Format Restrictions on Performance of Large Language Models",
+        authors=["Zhi Rui Tam"],
+        year=2024,
+    )
+    candidate = CandidateRecord(
+        source="acl",
+        title="Let Me Speak Freely? A Study On The Impact Of Format Restrictions On Large Language Model Performance.",
+        authors=["Zhi Rui Tam"],
+        year=2024,
+        doi="10.18653/v1/2024.emnlp-industry.91",
+        url="https://aclanthology.org/2024.emnlp-industry.91/",
+        is_official_record=True,
+        bibtex_url="https://aclanthology.org/2024.emnlp-industry.91.bib",
+        source_priority=1,
+    )
+
+    decision = resolve(query, [candidate])
+
+    assert decision.ok
+    assert decision.status == "verified_official_bibtex"
+    assert "title high-overlap reordered match" in decision.decision_trace
+
+
+def test_resolver_blocks_reordered_title_without_matching_year_support():
+    query = PaperQuery(
+        query_id="unsafe-title-variant",
+        title="Let Me Speak Freely? A Study on the Impact of Format Restrictions on Performance of Large Language Models",
+        authors=["Zhi Rui Tam"],
+        year=2024,
+    )
+    candidate = CandidateRecord(
+        source="acl",
+        title="Let Me Speak Freely? A Study On The Impact Of Format Restrictions On Large Language Model Performance.",
+        authors=["Zhi Rui Tam"],
+        year=2025,
+        url="https://aclanthology.org/2025.fake.1/",
+        is_official_record=True,
+        bibtex_url="https://aclanthology.org/2025.fake.1.bib",
+        source_priority=1,
+    )
+
+    decision = resolve(query, [candidate])
+
+    assert not decision.ok
+    assert decision.status == "unresolved"

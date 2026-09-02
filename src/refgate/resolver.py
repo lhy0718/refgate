@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from difflib import SequenceMatcher
 import re
 import unicodedata
 
@@ -26,36 +27,99 @@ def normalize_author(author: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _title_terms(title: str) -> set[str]:
+    terms = re.findall(r"[^\W_]+", normalize_title(title), flags=re.UNICODE)
+    normalized = set()
+    for term in terms:
+        if term.isascii() and len(term) > 4 and term.endswith("ies"):
+            term = term[:-3] + "y"
+        elif term.isascii() and len(term) > 4 and term.endswith("s") and not term.endswith(("ss", "us", "is")):
+            term = term[:-1]
+        normalized.add(term)
+    return normalized
+
+
+def title_match_kind(query_title: str, candidate_title: str) -> str | None:
+    query_normalized = normalize_title(query_title)
+    candidate_normalized = normalize_title(candidate_title)
+    if not query_normalized or not candidate_normalized:
+        return None
+    if query_normalized == candidate_normalized:
+        return "normalized_exact"
+
+    query_terms = _title_terms(query_title)
+    candidate_terms = _title_terms(candidate_title)
+    if min(len(query_terms), len(candidate_terms)) < 8:
+        return None
+    term_union = query_terms | candidate_terms
+    term_overlap = len(query_terms & candidate_terms) / len(term_union) if term_union else 0
+    ordered_similarity = SequenceMatcher(None, query_normalized, candidate_normalized).ratio()
+    if term_overlap >= 0.9 and ordered_similarity >= 0.85:
+        return "high_overlap_reordered"
+    return None
+
+
+def _first_author_matches(query: PaperQuery, candidate: CandidateRecord) -> bool:
+    if not query.authors or not candidate.authors:
+        return False
+    query_first = normalize_author(query.authors[0])
+    candidate_first = normalize_author(candidate.authors[0])
+    query_name_parts = set(query_first.split())
+    candidate_name_parts = set(candidate_first.split())
+    return bool(
+        query_first
+        and candidate_first
+        and (
+            query_first in candidate_first
+            or candidate_first in query_first
+            or (query_name_parts == candidate_name_parts and len(query_name_parts) > 1)
+        )
+    )
+
+
+def title_match_supported(query: PaperQuery, candidate: CandidateRecord) -> bool:
+    match_kind = title_match_kind(query.title, candidate.title)
+    if match_kind == "normalized_exact":
+        return True
+    if match_kind != "high_overlap_reordered":
+        return False
+    if query.doi and candidate.doi and query.doi.lower() == candidate.doi.lower():
+        return True
+    return bool(
+        candidate.is_official_record
+        and query.year is not None
+        and candidate.year == query.year
+        and _first_author_matches(query, candidate)
+    )
+
+
 def score_candidate(query: PaperQuery, candidate: CandidateRecord) -> tuple[int, list[str]]:
     score = 0
     trace: list[str] = []
 
     if query.doi and candidate.doi and query.doi.lower() == candidate.doi.lower():
-        return 100, ["doi exact match"]
+        score += 100
+        trace.append("doi exact match")
 
     if query.arxiv_id and candidate.arxiv_id and query.arxiv_id.lower() == candidate.arxiv_id.lower():
-        return 98, ["arxiv id exact match"]
+        score += 98
+        trace.append("arxiv id exact match")
 
-    if normalize_title(query.title) == normalize_title(candidate.title):
+    title_match = title_match_kind(query.title, candidate.title)
+    if title_match == "normalized_exact":
         score += 60
         trace.append("title normalized exact match")
+    elif title_match == "high_overlap_reordered" and title_match_supported(query, candidate):
+        score += 55
+        trace.append("title high-overlap reordered match")
 
     if query.year is not None and candidate.year == query.year:
         score += 10
         trace.append("year match")
 
-    if query.authors and candidate.authors:
-        query_first = normalize_author(query.authors[0])
-        candidate_first = normalize_author(candidate.authors[0])
-        query_name_parts = set(query_first.split())
-        candidate_name_parts = set(candidate_first.split())
-        if query_first and candidate_first and (
-            query_first in candidate_first
-            or candidate_first in query_first
-            or (query_name_parts == candidate_name_parts and len(query_name_parts) > 1)
-        ):
-            score += 10
-            trace.append("first author match")
+    if _first_author_matches(query, candidate):
+        score += 10
+        trace.append("first author match")
 
     if candidate.is_official_record:
         score += 15
@@ -157,7 +221,7 @@ def resolve(query: PaperQuery, candidates: list[CandidateRecord]) -> ResolverDec
             selected_candidate=top_candidate,
         )
 
-    if query.title and normalize_title(query.title) != normalize_title(top_candidate.title):
+    if query.title and not title_match_supported(query, top_candidate):
         return ResolverDecision(
             query_id=query.query_id,
             decision="blocked",

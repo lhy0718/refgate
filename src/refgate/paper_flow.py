@@ -24,7 +24,7 @@ from .lockfile import load_lockfile
 from .models import AuditIssue
 from .reports import render_markdown_report
 from .source_title import check_source_titles, render_source_title_check_section, source_title_next_actions
-from .tex import load_tex_document
+from .tex import load_tex_documents
 
 
 SUMMARY_KEY_LIMIT = 10
@@ -448,7 +448,7 @@ def render_claim_source_check_section(claim_source_check: dict[str, Any] | None)
     if blocking_issues or missing_source_keys or no_match_claims:
         lines.append("- Keep mapped claims blocked until source evidence is reviewed and imported with `import-review`.")
     elif suggestions:
-        lines.append("- Review evidence suggestions and import a checked review only after direct source review.")
+        lines.append("- Review evidence suggestions and import a checked review only after source-evidence review.")
     else:
         lines.append("- No claim-source action required.")
     return "\n".join(lines).rstrip() + "\n"
@@ -471,18 +471,25 @@ def _paper_audit_rerun_command(
     source_map_output: str | Path | None,
     claim_review_output: str | Path | None,
     submission: bool,
+    extra_tex_paths: list[Path] | None = None,
 ) -> str:
     parts: list[str | Path] = [
         "paper-audit",
         "--tex",
         tex_path,
-        "--bib",
-        bib_path,
-        "--lock",
-        lock_path,
-        "--claims",
-        claims_path,
     ]
+    for extra_tex_path in extra_tex_paths or []:
+        parts.extend(["--extra-tex", extra_tex_path])
+    parts.extend(
+        [
+            "--bib",
+            bib_path,
+            "--lock",
+            lock_path,
+            "--claims",
+            claims_path,
+        ]
+    )
     if report:
         parts.extend(["--report", report])
     if resolver_output:
@@ -501,6 +508,12 @@ def _paper_audit_rerun_command(
     return _refgate_command(*parts)
 
 
+def _refgate_artifact_dir_for_claims(claims_path: Path) -> Path:
+    if claims_path.parent.name == ".refgate":
+        return claims_path.parent
+    return claims_path.parent / ".refgate"
+
+
 def _codex_review_bundle_command(
     *,
     tex_path: Path,
@@ -511,7 +524,7 @@ def _codex_review_bundle_command(
     source_dir: str | Path | None,
     source_map_output: str | Path | None,
 ) -> str:
-    bundle_dir = claims_path.parent / ".refgate"
+    bundle_dir = _refgate_artifact_dir_for_claims(claims_path)
     bundle_output = bundle_dir / "codex_review_bundle.json"
     markdown_output = bundle_dir / "codex_review_bundle.md"
     parts: list[str | Path] = [
@@ -540,7 +553,7 @@ def _sync_bibtex_action(*, bib_path: Path, lock_path: Path) -> dict[str, Any]:
     return {
         "code": "SYNC_BIBTEX",
         "kind": "bibtex_sync",
-        "requires_human_review": False,
+        "requires_review": False,
         "writes_files": False,
         "network_required": False,
         "message": "Plan a lockfile-backed BibTeX synchronization for entries that differ from canonical provenance.",
@@ -588,6 +601,27 @@ def _reference_check_command(
     return _refgate_command(*parts)
 
 
+def _monitor_official_records_command(
+    *,
+    lock_path: Path,
+    cache_root: str | Path | None = None,
+    write_lock: str | Path | None = None,
+    live: bool = False,
+    fetch_official_bibtex: bool = False,
+) -> str:
+    parts: list[str | Path] = ["monitor-official-records", "--lock", lock_path]
+    if cache_root:
+        parts.extend(["--cache-root", cache_root])
+    if write_lock:
+        parts.extend(["--write-lock", write_lock])
+    if live:
+        parts.append("--live")
+    if fetch_official_bibtex:
+        parts.append("--fetch-official-bibtex")
+    parts.append("--json")
+    return _refgate_command(*parts)
+
+
 def build_paper_audit_next_actions(
     *,
     tex_path: Path,
@@ -604,15 +638,112 @@ def build_paper_audit_next_actions(
     submission: bool,
     resolver_summary: dict[str, Any],
     blocking: list[Any],
+    warnings: list[Any],
     claim_source_check: dict[str, Any] | None,
     handoff_output: str | Path | None,
     csl_output: str | Path | None,
+    extra_tex_paths: list[Path] | None = None,
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     work_item_count = int(resolver_summary.get("work_item_count", 0) or 0)
     blocking_codes = {issue.code for issue in blocking}
+    warning_codes = {issue.code for issue in warnings}
     if "OFFICIAL_EXPORT_CONTENT_CHANGED" in blocking_codes:
         actions.append(_sync_bibtex_action(bib_path=bib_path, lock_path=lock_path))
+
+    if "MANUAL_FALLBACK_NOT_ALLOWED" in blocking_codes:
+        citation_keys = [
+            issue.citation_key
+            for issue in blocking
+            if issue.code == "MANUAL_FALLBACK_NOT_ALLOWED" and issue.citation_key
+        ]
+        actions.append(
+            {
+                "code": "MONITOR_OFFICIAL_BIBTEX_RECORDS",
+                "kind": "official_record_monitor",
+                "requires_review": False,
+                "writes_files": False,
+                "network_required": False,
+                "message": "Plan official BibTeX refreshes for publisher-metadata manual fallback entries.",
+                "command": _monitor_official_records_command(lock_path=lock_path),
+                "discovery_sources": ["google_scholar"],
+                "discovery_note": "Google Scholar is discovery-only; use it to find official venue or DOI pages, not as official BibTeX provenance.",
+                "scholar_bridge_command": _refgate_command(
+                    "scholar-official-bridge",
+                    "--lock",
+                    lock_path,
+                    "--scholar-html-dir",
+                    _refgate_artifact_dir_for_claims(claims_path) / "scholar-html",
+                    "--candidate-dir",
+                    _refgate_artifact_dir_for_claims(claims_path) / "reference-candidates",
+                    "--cache-root",
+                    _refgate_artifact_dir_for_claims(claims_path) / "cache",
+                    "--live-scholar",
+                    "--live-official",
+                    "--write-candidates",
+                    "--write-lock",
+                    lock_path,
+                    "--fetch-official-bibtex",
+                    "--json",
+                ),
+                "live_reference_check_command": _monitor_official_records_command(
+                    lock_path=lock_path,
+                    cache_root=_refgate_artifact_dir_for_claims(claims_path) / "cache",
+                    write_lock=lock_path,
+                    live=True,
+                    fetch_official_bibtex=True,
+                ),
+                "citation_key_sample": citation_keys[:SUMMARY_KEY_LIMIT],
+                "omitted_citation_key_count": max(0, len(citation_keys) - SUMMARY_KEY_LIMIT),
+            }
+        )
+
+    if "ARXIV_OFFICIAL_RECORD_MONITOR_REQUIRED" in warning_codes:
+        citation_keys = [
+            issue.citation_key
+            for issue in warnings
+            if issue.code == "ARXIV_OFFICIAL_RECORD_MONITOR_REQUIRED" and issue.citation_key
+        ]
+        actions.append(
+            {
+                "code": "MONITOR_ARXIV_OFFICIAL_RECORDS",
+                "kind": "official_record_monitor",
+                "requires_review": False,
+                "writes_files": False,
+                "network_required": False,
+                "message": "Plan official-record refreshes for verified arXiv fallback entries before submission.",
+                "command": _monitor_official_records_command(lock_path=lock_path),
+                "discovery_sources": ["google_scholar"],
+                "discovery_note": "Google Scholar is discovery-only; use it to find official venue or DOI pages, not as official BibTeX provenance.",
+                "scholar_bridge_command": _refgate_command(
+                    "scholar-official-bridge",
+                    "--lock",
+                    lock_path,
+                    "--scholar-html-dir",
+                    _refgate_artifact_dir_for_claims(claims_path) / "scholar-html",
+                    "--candidate-dir",
+                    _refgate_artifact_dir_for_claims(claims_path) / "reference-candidates",
+                    "--cache-root",
+                    _refgate_artifact_dir_for_claims(claims_path) / "cache",
+                    "--live-scholar",
+                    "--live-official",
+                    "--write-candidates",
+                    "--write-lock",
+                    lock_path,
+                    "--fetch-official-bibtex",
+                    "--json",
+                ),
+                "live_reference_check_command": _monitor_official_records_command(
+                    lock_path=lock_path,
+                    cache_root=_refgate_artifact_dir_for_claims(claims_path) / "cache",
+                    write_lock=lock_path,
+                    live=True,
+                    fetch_official_bibtex=True,
+                ),
+                "citation_key_sample": citation_keys[:SUMMARY_KEY_LIMIT],
+                "omitted_citation_key_count": max(0, len(citation_keys) - SUMMARY_KEY_LIMIT),
+            }
+        )
 
     if work_item_count:
         output_path = resolver_output or resolver_summary.get("output") or "refgate_queries.json"
@@ -623,7 +754,7 @@ def build_paper_audit_next_actions(
             {
                 "code": "RESOLVE_REFERENCE_PROVENANCE",
                 "kind": "reference_provenance",
-                "requires_human_review": True,
+                "requires_review": True,
                 "writes_files": True,
                 "network_required": False,
                 "message": "Resolve unresolved bibliography entries, then run discovery/reference-check with reviewed candidates.",
@@ -687,7 +818,7 @@ def build_paper_audit_next_actions(
             {
                 "code": "MAP_CLAIM_SOURCES",
                 "kind": "claim_source_mapping",
-                "requires_human_review": True,
+                "requires_review": True,
                 "writes_files": True,
                 "network_required": False,
                 "message": "Add full source text/PDF files named by citation key, then rerun paper-audit with source mapping.",
@@ -703,6 +834,7 @@ def build_paper_audit_next_actions(
                     source_map_output=suggested_source_map,
                     claim_review_output=suggested_review,
                     submission=submission,
+                    extra_tex_paths=extra_tex_paths,
                 ),
                 "file_name_examples": ["citation_key.txt", "citation_key.pdf"],
                 "source_download_plan_command": _refgate_command(
@@ -723,7 +855,7 @@ def build_paper_audit_next_actions(
                 {
                     "code": "ADD_MISSING_SOURCE_FILES",
                     "kind": "claim_source_mapping",
-                    "requires_human_review": True,
+                    "requires_review": True,
                     "writes_files": True,
                     "network_required": False,
                     "message": "Add source text/PDF files for citation keys that have claims but no mapped source.",
@@ -749,6 +881,7 @@ def build_paper_audit_next_actions(
                         source_map_output=source_map_output,
                         claim_review_output=claim_review_output,
                         submission=submission,
+                        extra_tex_paths=extra_tex_paths,
                     ),
                 }
             )
@@ -758,7 +891,7 @@ def build_paper_audit_next_actions(
                 {
                     "code": "REVIEW_NO_MATCH_CLAIMS",
                     "kind": "claim_evidence_review",
-                    "requires_human_review": True,
+                    "requires_review": True,
                     "writes_files": False,
                     "network_required": False,
                     "message": "Open the claim review report and inspect mapped sources that did not contain a matching evidence block.",
@@ -771,7 +904,7 @@ def build_paper_audit_next_actions(
                 {
                     "code": "EXPORT_CODEX_REVIEW_BUNDLE",
                     "kind": "codex_claim_review_bundle",
-                    "requires_human_review": False,
+                    "requires_review": False,
                     "writes_files": True,
                     "network_required": False,
                     "message": "Export a Codex-readable claim review bundle with source candidates; Codex can review it and produce JSONL for import-review.",
@@ -784,13 +917,13 @@ def build_paper_audit_next_actions(
                         source_dir=source_dir,
                         source_map_output=source_map_output,
                     ),
-                    "review_result": str(claims_path.parent / ".refgate" / "codex_review_result.jsonl"),
+                    "review_result": str(_refgate_artifact_dir_for_claims(claims_path) / "codex_review_result.jsonl"),
                     "import_command": _refgate_command(
                         "import-review",
                         "--claims",
                         claims_path,
                         "--review",
-                        claims_path.parent / ".refgate" / "codex_review_result.jsonl",
+                        _refgate_artifact_dir_for_claims(claims_path) / "codex_review_result.jsonl",
                         "--output",
                         claims_path.with_name(f"{claims_path.stem}.reviewed{claims_path.suffix}"),
                         "--json",
@@ -801,7 +934,7 @@ def build_paper_audit_next_actions(
                 {
                     "code": "REVIEW_CLAIM_EVIDENCE",
                     "kind": "claim_evidence_review",
-                    "requires_human_review": True,
+                    "requires_review": True,
                     "writes_files": False,
                     "network_required": False,
                     "message": "Review suggested evidence spans, then mark supported claims checked or rewrite/delete unsupported claims.",
@@ -815,7 +948,7 @@ def build_paper_audit_next_actions(
             {
                 "code": "EXPORT_HANDOFF",
                 "kind": "handoff_export",
-                "requires_human_review": False,
+                "requires_review": False,
                 "writes_files": True,
                 "network_required": False,
                 "message": "Audit passed; export a standalone handoff artifact if this manuscript is ready to share.",
@@ -855,17 +988,29 @@ def run_paper_audit(
     allow_blocking_handoff: bool = False,
     update_claims: bool = False,
     include_work_items: bool = False,
+    extra_tex: list[str | Path] | None = None,
 ) -> dict[str, Any]:
     tex_path = Path(tex)
+    extra_tex_paths = [Path(path) for path in (extra_tex or [])]
     bib_path = Path(bib)
     lock_path = Path(lock)
     claims_path = Path(claims)
 
-    tex_document = load_tex_document(tex_path, submission=submission)
+    tex_document = load_tex_documents(
+        [tex_path, *extra_tex_paths],
+        submission=submission,
+    )
 
     created: dict[str, Any] = {}
     if not lock_path.exists() or not claims_path.exists():
-        created["bootstrap"] = bootstrap_paper(tex_path, bib_path, lock_path, claims_path, project=project)
+        created["bootstrap"] = bootstrap_paper(
+            tex_path,
+            bib_path,
+            lock_path,
+            claims_path,
+            project=project,
+            extra_tex=extra_tex_paths,
+        )
     elif update_claims:
         stubs = update_claim_stub_file_from_sources(
             [{"source_file": source.display_path, "text": source.text} for source in tex_document.sources],
@@ -981,9 +1126,11 @@ def run_paper_audit(
         submission=submission,
         resolver_summary=resolver_summary,
         blocking=blocking,
+        warnings=warnings,
         claim_source_check=claim_source_check,
         handoff_output=handoff_output,
         csl_output=csl_output,
+        extra_tex_paths=extra_tex_paths,
     )
     if source_title_check:
         next_actions.extend(source_title_next_actions(source_title_check))

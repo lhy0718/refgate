@@ -1,4 +1,27 @@
-from refgate.bibtex import parse_bibtex_file, rekey_bibtex_entry
+import pytest
+
+from refgate.bibtex import (
+    bibtex_entries_semantically_equal,
+    bibtex_semantic_sha256,
+    parse_bibtex_file,
+    rekey_bibtex_entry,
+)
+
+
+def _semantic_fixture_entry(citation_key: str = "official-key", **overrides: str) -> str:
+    fields = {
+        "title": "Café LLM Study",
+        "author": "Doe, Jane and Smith, Ada",
+        "booktitle": "Proceedings of the Fixture Conference",
+        "year": "2026",
+        "pages": "10--20",
+        "doi": "10.1234/refgate.2026",
+        "publisher": "ACM",
+        "url": "https://publisher.example/refgate",
+    }
+    fields.update(overrides)
+    body = "\n".join(f"  {name} = {{{value}}}," for name, value in fields.items())
+    return f"@inproceedings{{{citation_key},\n{body}\n}}\n"
 
 
 def test_bibtex_parser_preserves_nested_brace_field():
@@ -85,6 +108,43 @@ def test_rekey_bibtex_entry_preserves_body_with_new_citation_key():
 
     assert "manuscriptKey2026" in parsed
     assert parsed["manuscriptKey2026"]["title"] == "Official Title"
+
+
+def test_bibtex_semantic_checksum_ignores_key_order_whitespace_braces_and_unicode_form():
+    official = _semantic_fixture_entry()
+    manuscript = """@INPROCEEDINGS{manuscript_local_key,
+  doi = {https://doi.org/10.1234/REFGATE.2026},
+  pages = {10 - 20},
+  year = 2026,
+  booktitle = {Proceedings   of the Fixture Conference},
+  author = {Doe, Jane   and Smith, Ada},
+  title = {Café {LLM} Study},
+  url = {https://publisher.example/refgate},
+  publisher = {Association for Computing Machinery}
+}
+"""
+
+    assert bibtex_entries_semantically_equal(official, manuscript)
+    assert bibtex_semantic_sha256(official) == bibtex_semantic_sha256(manuscript)
+
+
+@pytest.mark.parametrize(
+    ("field", "changed_value"),
+    [
+        ("title", "A Different Study"),
+        ("author", "Roe, Jane and Smith, Ada"),
+        ("year", "2025"),
+        ("booktitle", "Proceedings of a Different Conference"),
+        ("pages", "11--20"),
+        ("doi", "10.1234/refgate.changed"),
+    ],
+)
+def test_bibtex_semantic_checksum_detects_meaningful_metadata_changes(field, changed_value):
+    official = _semantic_fixture_entry()
+    changed = _semantic_fixture_entry("manuscript_local_key", **{field: changed_value})
+
+    assert not bibtex_entries_semantically_equal(official, changed)
+    assert bibtex_semantic_sha256(official) != bibtex_semantic_sha256(changed)
 
 
 _ENTRY_A = '@article{a,\n    title = "First",\n    year = "2020",\n}\n'

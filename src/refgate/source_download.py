@@ -296,6 +296,14 @@ def _url_from_bibtex(text: str) -> str | None:
         entry = parse_bibtex_entry(text)
     except ValueError:
         return None
+    pdf_url = entry.get("pdf", "").strip()
+    if re.match(r"^https?://", pdf_url, flags=re.IGNORECASE):
+        return re.sub(
+            r"^http://proceedings\.mlr\.press/",
+            "https://proceedings.mlr.press/",
+            pdf_url,
+            flags=re.IGNORECASE,
+        )
     url = entry.get("url", "").strip()
     return url or None
 

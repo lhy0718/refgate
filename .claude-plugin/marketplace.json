@@ -4,6 +4,9 @@
     "name": "Refgate contributors",
     "url": "https://github.com/lhy0718/refgate"
   },
+  "metadata": {
+    "description": "Repo-local catalog for the Refgate reference and citation evidence gate."
+  },
   "plugins": [
     {
       "name": "refgate",

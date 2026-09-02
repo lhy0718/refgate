@@ -8,6 +8,7 @@ from .assist import query_from_lock_entry, recommended_sources
 from .lockfile import load_lockfile
 from .models import LockEntry
 from .reference_check import run_reference_check
+from .scholar import google_scholar_discovery_search
 
 
 OFFICIAL_MONITOR_SOURCES = [
@@ -42,9 +43,11 @@ OFFICIAL_MONITOR_SOURCES = [
 def needs_official_record_monitor(entry: LockEntry) -> bool:
     source_kind = str(entry.bibtex.get("source_kind") or "")
     authority_source = str(entry.authority.get("source") or "")
+    audit_policy_requires_official = source_kind == "publisher_metadata_manual_normalized"
     return (
         entry.status in {"arxiv_fallback_verified", "official_record_pending"}
         or source_kind == "arxiv_manual_normalized"
+        or audit_policy_requires_official
         or authority_source == "arxiv"
     )
 
@@ -86,6 +89,44 @@ def _monitor_command(
     return _shell_command(parts)
 
 
+def _scholar_bridge_command(
+    *,
+    lock_path: str | Path,
+    citation_key: str,
+    cache_root: str | Path,
+    prefer_cache: bool,
+    write_lock: str | Path | None,
+    fetch_official_bibtex: bool,
+) -> str:
+    parts: list[str | Path] = [
+        "python",
+        "-m",
+        "refgate",
+        "scholar-official-bridge",
+        "--lock",
+        lock_path,
+        "--scholar-html-dir",
+        "SCHOLAR_HTML_DIR",
+        "--candidate-dir",
+        "REFERENCE_CANDIDATES_DIR",
+        "--cache-root",
+        cache_root,
+        "--citation-key",
+        citation_key,
+        "--live-scholar",
+        "--live-official",
+        "--write-candidates",
+    ]
+    if prefer_cache:
+        parts.append("--prefer-cache")
+    if write_lock:
+        parts.extend(["--write-lock", write_lock])
+    if fetch_official_bibtex:
+        parts.append("--fetch-official-bibtex")
+    parts.append("--json")
+    return _shell_command(parts)
+
+
 def build_official_monitor_plan(
     lock_path: str | Path,
     *,
@@ -113,6 +154,15 @@ def build_official_monitor_plan(
                 "current_bibtex_source_kind": entry.bibtex.get("source_kind"),
                 "query": query.to_dict(),
                 "recommended_sources": item_sources,
+                "discovery_searches": [google_scholar_discovery_search(query)],
+                "scholar_bridge_command": _scholar_bridge_command(
+                    lock_path=lock_path,
+                    citation_key=entry.citation_key,
+                    cache_root=cache_root,
+                    prefer_cache=prefer_cache,
+                    write_lock=write_lock,
+                    fetch_official_bibtex=fetch_official_bibtex,
+                ),
                 "command": _monitor_command(
                     lock_path=lock_path,
                     citation_key=entry.citation_key,
@@ -162,9 +212,11 @@ def run_official_monitor(
             "citation_key": item["citation_key"],
             "sources": item["recommended_sources"],
             "command": item["command"],
+            "discovery_searches": item.get("discovery_searches", []),
+            "scholar_bridge_command": item.get("scholar_bridge_command"),
             "network_required": True,
             "writes_files": bool(write_lock),
-            "requires_human_review": False,
+            "requires_review": False,
         }
         for item in plan["items"]
     ]

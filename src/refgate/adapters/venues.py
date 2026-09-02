@@ -4,6 +4,7 @@ import json
 import re
 from html import unescape
 from urllib.parse import parse_qs, quote, urlencode, urlparse
+from urllib.request import Request, urlopen
 
 from refgate.models import AuthorityRecord, BibtexRecord, CandidateRecord, PaperQuery
 from refgate.resolver import normalize_title
@@ -96,6 +97,26 @@ class AcmAdapter(OfficialHtmlAdapter):
     venue_label = "ACM"
     url_domains = ("dl.acm.org",)
 
+    def discover(self, query: PaperQuery) -> list[CandidateRecord]:
+        candidates = super().discover(query)
+        if query.doi and query.doi.lower().startswith("10.1145/"):
+            candidates.append(
+                CandidateRecord(
+                    source=self.name,
+                    title=query.title,
+                    authors=query.authors,
+                    year=query.year,
+                    venue=self.venue_label,
+                    doi=query.doi,
+                    url=f"https://dl.acm.org/doi/{quote(query.doi, safe='/')}",
+                    is_official_record=True,
+                    bibtex_url=_acm_bibtex_url(query.doi),
+                    source_priority=1,
+                    raw={"metadata_source": "doi_derived_official_export"},
+                )
+            )
+        return candidates
+
     def candidate_from_html(self, url: str, html: str) -> CandidateRecord:
         candidate = super().candidate_from_html(url, html)
         if not candidate.doi:
@@ -120,6 +141,28 @@ class IeeeAdapter(OfficialHtmlAdapter):
     name = "ieee"
     venue_label = "IEEE"
     url_domains = ("ieeexplore.ieee.org",)
+
+    def discover(self, query: PaperQuery) -> list[CandidateRecord]:
+        candidates = super().discover(query)
+        if query.doi and query.doi.lower().startswith("10.1109/"):
+            record_url = _doi_redirect_url(query.doi) or f"https://doi.org/{query.doi}"
+            document_id = _ieee_document_id_from_url(record_url)
+            candidates.append(
+                CandidateRecord(
+                    source=self.name,
+                    title=query.title,
+                    authors=query.authors,
+                    year=query.year,
+                    venue=self.venue_label,
+                    doi=query.doi,
+                    url=record_url,
+                    is_official_record=True,
+                    bibtex_url=_ieee_bibtex_url(document_id) if document_id else None,
+                    source_priority=1,
+                    raw={"metadata_source": "doi_redirect_official_record"},
+                )
+            )
+        return candidates
 
     def candidate_from_html(self, url: str, html: str) -> CandidateRecord:
         candidate = super().candidate_from_html(url, html)
@@ -240,6 +283,26 @@ class SageAdapter(OfficialHtmlAdapter):
     name = "sage"
     venue_label = "SAGE"
     url_domains = ("journals.sagepub.com",)
+
+    def discover(self, query: PaperQuery) -> list[CandidateRecord]:
+        candidates = super().discover(query)
+        if query.doi and query.doi.lower().startswith("10.1518/"):
+            candidates.append(
+                CandidateRecord(
+                    source=self.name,
+                    title=query.title,
+                    authors=query.authors,
+                    year=query.year,
+                    venue=self.venue_label,
+                    doi=query.doi,
+                    url=f"https://journals.sagepub.com/doi/{quote(query.doi, safe='/')}",
+                    is_official_record=True,
+                    bibtex_url=_sage_bibtex_url(query.doi),
+                    source_priority=1,
+                    raw={"metadata_source": "doi_derived_official_export"},
+                )
+            )
+        return candidates
 
 
 class TaylorFrancisAdapter(OfficialHtmlAdapter):
@@ -478,6 +541,32 @@ def _acm_doi_from_url(url: str) -> str | None:
 
 def _acm_bibtex_url(doi: str) -> str:
     return f"https://dl.acm.org/action/exportCiteProcCitation?dois={quote(doi, safe='')}&targetFile=custom-bibtex&format=bibTex"
+
+
+def _sage_bibtex_url(doi: str) -> str:
+    return f"https://journals.sagepub.com/action/downloadCitation?doi={quote(doi, safe='')}&format=bibtex"
+
+
+def _doi_redirect_url(doi: str) -> str | None:
+    request = Request(f"https://doi.org/{doi}", headers={"User-Agent": "refgate/0.1"}, method="HEAD")
+    try:
+        with urlopen(request, timeout=20) as response:
+            return response.geturl()
+    except Exception:
+        return None
+
+
+def _ieee_document_id_from_url(url: str) -> str | None:
+    match = re.search(r"ieeexplore\.ieee\.org/document/(\d+)", url)
+    return match.group(1) if match else None
+
+
+def _ieee_bibtex_url(document_id: str) -> str:
+    return (
+        "https://ieeexplore.ieee.org/xpl/downloadCitations"
+        f"?recordIds={quote(document_id, safe='')}"
+        "&citations-format=citation-abstract&download-format=download-bibtex"
+    )
 
 
 ADAPTERS: dict[str, type[OfficialHtmlAdapter]] = {
