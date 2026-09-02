@@ -14,7 +14,9 @@ def sha256_text(text: str) -> str:
 def parse_bibtex_entry(text: str) -> dict[str, str]:
     match = ENTRY_RE.search(text.strip())
     if not match:
-        raise ValueError("Could not parse BibTeX entry")
+        head = re.match(r"@\s*\w+\s*\{\s*([^,\s]+)", text.strip())
+        where = f" near citation key {head.group(1)!r}" if head else ""
+        raise ValueError(f"Could not parse BibTeX entry{where}")
     fields = {"entry_type": match.group("type").lower(), "citation_key": match.group("key").strip()}
     body = match.group("body")
     fields.update(_parse_fields(body))
@@ -140,18 +142,34 @@ def normalize_bibtex_fields(entry: dict[str, str]) -> dict[str, str]:
 def rekey_bibtex_entry(text: str, citation_key: str) -> str:
     match = ENTRY_RE.search(text.strip())
     if not match:
-        raise ValueError("Could not parse BibTeX entry")
+        head = re.match(r"@\s*\w+\s*\{\s*([^,\s]+)", text.strip())
+        where = f" near citation key {head.group(1)!r}" if head else ""
+        raise ValueError(f"Could not parse BibTeX entry{where}")
     return f"@{match.group('type')}{{{citation_key},{match.group('body')}}}\n"
 
 
 def split_bibtex_entries(text: str) -> list[str]:
-    starts = [match.start() for match in re.finditer(r"@\s*\w+\s*\{", text)]
-    if not starts:
-        return []
+    """Split a .bib file into entry texts.
+
+    Each entry ends at its own balanced closing brace rather than at the next
+    ``@``. BibTeX ignores everything between entries, so comment lines and prose
+    there must not be appended to the preceding entry.
+    """
     entries: list[str] = []
-    for index, start in enumerate(starts):
-        end = starts[index + 1] if index + 1 < len(starts) else len(text)
-        entries.append(text[start:end].strip())
+    for match in re.finditer(r"@\s*\w+\s*\{", text):
+        start = match.start()
+        depth = 0
+        end: int | None = None
+        for index in range(match.end() - 1, len(text)):
+            char = text[index]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    end = index + 1
+                    break
+        entries.append(text[start:end].strip() if end is not None else text[start:].strip())
     return entries
 
 

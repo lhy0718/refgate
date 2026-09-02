@@ -85,3 +85,45 @@ def test_rekey_bibtex_entry_preserves_body_with_new_citation_key():
 
     assert "manuscriptKey2026" in parsed
     assert parsed["manuscriptKey2026"]["title"] == "Official Title"
+
+
+_ENTRY_A = '@article{a,\n    title = "First",\n    year = "2020",\n}\n'
+_ENTRY_B = '@article{b,\n    title = "Second",\n    year = "2021",\n}\n'
+
+
+@pytest.mark.parametrize(
+    "between",
+    [
+        "% a note explaining why the next entry is here\n",
+        "%% doubled comment marker\n",
+        "plain prose with no comment marker\n",
+        "\n\n",
+        "@comment{ignored}\n",
+    ],
+)
+def test_text_between_entries_is_not_absorbed(between: str) -> None:
+    parsed = parse_bibtex_file(f"{_ENTRY_A}\n{between}\n{_ENTRY_B}")
+    assert sorted(parsed) == ["a", "b"]
+    assert parsed["a"]["title"] == "First"
+    assert parsed["b"]["title"] == "Second"
+
+
+def test_trailing_comment_after_last_entry() -> None:
+    parsed = parse_bibtex_file(f"{_ENTRY_A}\n{_ENTRY_B}\n% trailing note\n")
+    assert sorted(parsed) == ["a", "b"]
+
+
+def test_leading_comment_before_first_entry() -> None:
+    parsed = parse_bibtex_file(f"% leading note\n{_ENTRY_A}\n{_ENTRY_B}")
+    assert sorted(parsed) == ["a", "b"]
+
+
+def test_braces_inside_a_value_do_not_end_the_entry() -> None:
+    entry = '@article{accented,\n    author = "Just, Ren{\\\'e} and Doe, Jane",\n}\n'
+    parsed = parse_bibtex_file(f"{entry}\n% note\n{_ENTRY_B}")
+    assert sorted(parsed) == ["accented", "b"]
+
+
+def test_parse_error_names_the_citation_key() -> None:
+    with pytest.raises(ValueError, match="near citation key 'broken'"):
+        parse_bibtex_file('@article{broken,\n    title = "x"\n')
