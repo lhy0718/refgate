@@ -1896,3 +1896,116 @@ def test_cli_fetch_bibtex_rekeys_resolved_official_export_to_requested_citation_
     assert entry["bibtex"]["citation_key"] == "seed_acl_fixture"
     assert entry["bibtex"]["field_checks"]["exported_citation_key"] == "smith-lee-2026-refgate"
     assert entry["bibtex"]["canonical_text"].startswith("@inproceedings{seed_acl_fixture,")
+
+
+def _minimal_lock(citation_key, *, title, status="missing_bibtex_provenance"):
+    return {
+        "schema_version": "refgate.lock.v1",
+        "entries": [
+            {
+                "citation_key": citation_key,
+                "short_title": title[:20],
+                "status": status,
+                "record": {"title": title, "authors": ["Doe, Jane"], "year": 2019, "venue": "Proceedings of Somewhere"},
+                "authority": {},
+                "bibtex": {"citation_key": citation_key, "source_kind": "unknown"},
+                "resolver": {"score": 0, "blocking_issues": [], "warnings": [], "decision_trace": []},
+                "checked_at": "2026-05-23",
+            }
+        ],
+    }
+
+
+def test_reference_check_reports_a_fixture_that_was_read_and_failed(tmp_path, capsys):
+    """A saved fixture that blows up must not be reported as an absent fixture.
+
+    The failure used to be caught into the result rows and dropped, and the run
+    then emitted REFERENCE_CANDIDATES_MISSING -- "No fixture or live candidate
+    records were available" -- about a file the operator had already saved.
+    """
+    lock = tmp_path / "refgate.lock.json"
+    lock.write_text(json.dumps(_minimal_lock("doe2019paper", title="A Paper About Things")), encoding="utf-8")
+    fixture_dir = tmp_path / "official-html"
+    fixture_dir.mkdir()
+    # No aclanthology URL and no DOI on the record, so the ACL adapter falls
+    # through to the Crossref title bridge, which tries to JSON-decode this.
+    (fixture_dir / "doe2019paper.acl.html").write_text("<html><body>not json</body></html>", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "reference-check",
+            "--lock", str(lock),
+            "--fixture-html-dir", str(fixture_dir),
+            "--source", "acl",
+            "--citation-key", "doe2019paper",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    codes = {issue["code"] for issue in payload["blocking_issues"]}
+
+    assert exit_code == 1
+    assert "REFERENCE_FIXTURE_LOOKUP_FAILED" in codes
+    assert "REFERENCE_CANDIDATES_MISSING" not in codes
+    failure = next(i for i in payload["blocking_issues"] if i["code"] == "REFERENCE_FIXTURE_LOOKUP_FAILED")
+    assert "doe2019paper.acl.html" in " ".join(failure["evidence"])
+    assert "ADD_REFERENCE_CANDIDATES" in {action["code"] for action in payload["next_actions"]}
+
+
+def test_cli_paper_audit_does_not_double_the_refgate_directory(tmp_path, capsys):
+    """Claims kept at .refgate/refgate_claims.tsv must not yield .refgate/.refgate paths."""
+    artifacts = tmp_path / ".refgate"
+    artifacts.mkdir()
+    tex = tmp_path / "paper.tex"
+    bib = tmp_path / "references.bib"
+    tex.write_text((FIXTURES / "manuscript_claims.tex").read_text(encoding="utf-8"), encoding="utf-8")
+    bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
+
+    main(
+        [
+            "paper-audit",
+            "--tex", str(tex),
+            "--bib", str(bib),
+            "--lock", str(artifacts / "refgate.lock.json"),
+            "--claims", str(artifacts / "refgate_claims.tsv"),
+            "--submission",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    action = next(a for a in payload["next_actions"] if a["code"] == "RESOLVE_REFERENCE_PROVENANCE")
+    rendered = json.dumps(action)
+
+    assert ".refgate/.refgate" not in rendered
+    assert action["official_bibtex_dir"] == str(artifacts / "official-bibtex")
+
+
+def test_run_paper_audit_keeps_an_existing_lockfile_when_claims_are_missing(tmp_path):
+    """A missing claims file must not cost the operator their verified provenance.
+
+    run_paper_audit bootstrapped whenever EITHER artifact was absent, and
+    bootstrapping rewrites the lockfile from the .bib -- so every
+    verified_official_bibtex record was silently reset to unknown.
+    """
+    from refgate.paper_flow import run_paper_audit
+
+    tex = tmp_path / "paper.tex"
+    bib = tmp_path / "references.bib"
+    lock = tmp_path / "refgate.lock.json"
+    claims = tmp_path / "refgate_claims.tsv"
+    tex.write_text((FIXTURES / "manuscript_claims.tex").read_text(encoding="utf-8"), encoding="utf-8")
+    bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
+
+    run_paper_audit(tex=tex, bib=bib, lock=lock, claims=claims, submission=True)
+    lock_data = json.loads(lock.read_text(encoding="utf-8"))
+    lock_data["entries"][0]["status"] = "verified_official_bibtex"
+    lock.write_text(json.dumps(lock_data), encoding="utf-8")
+    before = lock.read_text(encoding="utf-8")
+    claims.unlink()
+
+    result = run_paper_audit(tex=tex, bib=bib, lock=lock, claims=claims, submission=True)
+
+    assert lock.read_text(encoding="utf-8") == before
+    assert claims.exists()
+    assert "bootstrap" not in result["created"]
+    assert result["created"]["claims_bootstrap"]["lock_preserved"] == str(lock)

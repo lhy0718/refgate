@@ -483,7 +483,12 @@ def build_reference_check_next_actions(
     official_bibtex_root = Path(official_bibtex_dir) if official_bibtex_dir else Path("OFFICIAL_BIBTEX_DIR")
     for issue in blocking:
         citation_key = issue.get("citation_key", "")
-        if issue.get("code") in {"REFERENCE_CANDIDATES_MISSING", "NO_CANDIDATES"}:
+        if issue.get("code") in {
+            "REFERENCE_CANDIDATES_MISSING",
+            "REFERENCE_FIXTURE_CANDIDATES_EMPTY",
+            "REFERENCE_FIXTURE_LOOKUP_FAILED",
+            "NO_CANDIDATES",
+        }:
             actions.append(
                 {
                     "code": "ADD_REFERENCE_CANDIDATES",
@@ -890,6 +895,7 @@ def run_reference_check(
         live_sources = sources or recommended_sources(entry)
         live_results: list[dict[str, Any]] = []
         fixture_html_results: list[dict[str, Any]] = []
+        fixture_html_failures: list[dict[str, Any]] = []
         fixture_html_path: Path | None = None
         if fixture_html_root:
             html_candidates, fixture_html_results, fixture_html_path = _candidates_from_fixture_html(
@@ -899,6 +905,20 @@ def run_reference_check(
                 sources=live_sources,
             )
             candidates.extend(html_candidates)
+            # A fixture the operator saved, which was then read and failed, is
+            # evidence that exists. Staying silent about it sends them looking
+            # for a file already in the repo. The live path below reports its
+            # own failures this way.
+            fixture_html_failures = [
+                {
+                    "code": "REFERENCE_FIXTURE_LOOKUP_FAILED",
+                    "message": f"{result['source']} fixture HTML was read but no candidate could be built from it.",
+                    "citation_key": entry.citation_key,
+                    "evidence": [str(result.get("fixture_html", "")), str(result.get("error", ""))],
+                }
+                for result in fixture_html_results
+                if result.get("error")
+            ]
         if live:
             live_lookup_failures: list[dict[str, Any]] = []
             for source in live_sources:
@@ -956,14 +976,25 @@ def run_reference_check(
 
         if not decision.ok:
             blocking.extend(_issue_with_citation(issue, entry.citation_key) for issue in decision.blocking_issues)
+            blocking.extend(fixture_html_failures)
             if not candidates and not live_results:
-                blocking.append(
-                    {
-                        "code": "REFERENCE_CANDIDATES_MISSING",
-                        "message": "No fixture or live candidate records were available for this reference.",
-                        "citation_key": entry.citation_key,
-                    }
-                )
+                if fixture_html_results:
+                    blocking.append(
+                        {
+                            "code": "REFERENCE_FIXTURE_CANDIDATES_EMPTY",
+                            "message": "Fixture HTML was read for this reference but produced no candidate records.",
+                            "citation_key": entry.citation_key,
+                            "evidence": [str(result.get("fixture_html", "")) for result in fixture_html_results],
+                        }
+                    )
+                else:
+                    blocking.append(
+                        {
+                            "code": "REFERENCE_CANDIDATES_MISSING",
+                            "message": "No fixture or live candidate records were available for this reference.",
+                            "citation_key": entry.citation_key,
+                        }
+                    )
             rows.append(row)
             continue
 

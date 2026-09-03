@@ -1,0 +1,58 @@
+{
+  "lock": "/private/tmp/claude-501/pytest-of-hanyonglee/pytest-19/test_cli_paper_audit_does_not_1/.refgate/refgate.lock.json",
+  "schema_version": "refgate.resolver_assist.v1",
+  "skipped_verified": [],
+  "skipped_verified_count": 0,
+  "work_item_count": 1,
+  "work_items": [
+    {
+      "citation_key": "debenedetti2024agentdojo",
+      "query": {
+        "arxiv_id": null,
+        "authors": [
+          "Debenedetti, Edoardo"
+        ],
+        "citation_key": "debenedetti2024agentdojo",
+        "doi": null,
+        "preferred_venues": [
+          "Advances in Neural Information Processing Systems",
+          "https://proceedings.neurips.cc/paper_files/paper/2024/hash/example-Abstract-Conference.html"
+        ],
+        "query_id": "debenedetti2024agentdojo",
+        "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+        "year": 2024
+      },
+      "recommended_sources": [
+        "neurips",
+        "openalex",
+        "semantic_scholar"
+      ],
+      "source_commands": [
+        {
+          "discover": "discover --source neurips --query QUERY_JSON --live --json",
+          "fetch_bibtex": "fetch-bibtex --resolved RESOLVED_JSON --write-lock REFGATE_LOCK_JSON --json",
+          "resolve": "resolve --query QUERY_JSON --candidates CANDIDATES_JSON --json",
+          "source": "neurips"
+        },
+        {
+          "discover": "discover --source openalex --query QUERY_JSON --live --json",
+          "fetch_bibtex": "fetch-bibtex --resolved RESOLVED_JSON --write-lock REFGATE_LOCK_JSON --json",
+          "resolve": "resolve --query QUERY_JSON --candidates CANDIDATES_JSON --json",
+          "source": "openalex"
+        },
+        {
+          "discover": "discover --source semantic_scholar --query QUERY_JSON --live --json",
+          "fetch_bibtex": "fetch-bibtex --resolved RESOLVED_JSON --write-lock REFGATE_LOCK_JSON --json",
+          "resolve": "resolve --query QUERY_JSON --candidates CANDIDATES_JSON --json",
+          "source": "semantic_scholar"
+        }
+      ],
+      "status": "missing_bibtex_provenance",
+      "suggested_next": [
+        "discover --source neurips --query QUERY_JSON --live --json",
+        "resolve --query QUERY_JSON --candidates CANDIDATES_JSON --json",
+        "fetch-bibtex --resolved RESOLVED_JSON --write-lock REFGATE_LOCK_JSON --json"
+      ]
+    }
+  ]
+}

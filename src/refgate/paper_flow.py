@@ -747,9 +747,10 @@ def build_paper_audit_next_actions(
 
     if work_item_count:
         output_path = resolver_output or resolver_summary.get("output") or "refgate_queries.json"
-        fixture_html_dir = claims_path.parent / ".refgate" / "official-html"
-        reviewed_bibtex_dir = claims_path.parent / ".refgate" / "reviewed-bibtex"
-        official_bibtex_dir = claims_path.parent / ".refgate" / "official-bibtex"
+        artifact_dir = _refgate_artifact_dir_for_claims(claims_path)
+        fixture_html_dir = artifact_dir / "official-html"
+        reviewed_bibtex_dir = artifact_dir / "reviewed-bibtex"
+        official_bibtex_dir = artifact_dir / "official-bibtex"
         actions.append(
             {
                 "code": "RESOLVE_REFERENCE_PROVENANCE",
@@ -1002,7 +1003,7 @@ def run_paper_audit(
     )
 
     created: dict[str, Any] = {}
-    if not lock_path.exists() or not claims_path.exists():
+    if not lock_path.exists():
         created["bootstrap"] = bootstrap_paper(
             tex_path,
             bib_path,
@@ -1011,6 +1012,20 @@ def run_paper_audit(
             project=project,
             extra_tex=extra_tex_paths,
         )
+    elif not claims_path.exists():
+        # Bootstrapping rewrites the lockfile from the .bib, discarding every
+        # provenance record it holds. A missing claims file is not a reason to
+        # lose verified references, so create the claims stubs on their own.
+        stubs = update_claim_stub_file_from_sources(
+            [{"source_file": source.display_path, "text": source.text} for source in tex_document.sources],
+            claims_path,
+        )
+        created["claims_bootstrap"] = {
+            "output": str(claims_path),
+            "created": len(stubs),
+            "status": "claim_stubs_require_review",
+            "lock_preserved": str(lock_path),
+        }
     elif update_claims:
         stubs = update_claim_stub_file_from_sources(
             [{"source_file": source.display_path, "text": source.text} for source in tex_document.sources],
