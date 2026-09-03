@@ -2009,3 +2009,89 @@ def test_run_paper_audit_keeps_an_existing_lockfile_when_claims_are_missing(tmp_
     assert claims.exists()
     assert "bootstrap" not in result["created"]
     assert result["created"]["claims_bootstrap"]["lock_preserved"] == str(lock)
+
+
+def test_reference_check_survives_a_fixture_saved_in_a_non_utf8_encoding(tmp_path, capsys):
+    """A cp1252 publisher page must fail one reference, not the whole sweep.
+
+    read_text sat outside the try, so a single badly-encoded saved page raised
+    UnicodeDecodeError out of the command: no JSON envelope, no citation key,
+    and every healthy entry after it went unchecked.
+    """
+    lock = tmp_path / "refgate.lock.json"
+    lock.write_text(json.dumps(_minimal_lock("doe2019paper", title="A Paper About Things")), encoding="utf-8")
+    fixture_dir = tmp_path / "official-html"
+    fixture_dir.mkdir()
+    (fixture_dir / "doe2019paper.acl.html").write_bytes(
+        "<html><body>Café ACL Anthology</body></html>".encode("latin-1")
+    )
+
+    exit_code = main(
+        [
+            "reference-check",
+            "--lock", str(lock),
+            "--fixture-html-dir", str(fixture_dir),
+            "--source", "acl",
+            "--citation-key", "doe2019paper",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["status"] == "reference_check_complete"
+    assert "REFERENCE_FIXTURE_LOOKUP_FAILED" in {i["code"] for i in payload["blocking_issues"]}
+
+
+def test_reference_check_warns_about_a_failed_fixture_even_when_another_source_resolves(tmp_path, capsys):
+    """The operator saved that file expecting it to be used. Say it was not.
+
+    The failure record was only ever added to blocking inside `if not
+    decision.ok`, so any run that resolved -- including one rescued by a
+    different source -- reported ok with empty warnings.
+    """
+    lock = tmp_path / "refgate.lock.json"
+    lock.write_text(json.dumps(_minimal_lock("smith2026acm", title="Everything About Nothing")), encoding="utf-8")
+    fixture_dir = tmp_path / "official-html"
+    fixture_dir.mkdir()
+    (fixture_dir / "smith2026acm.acm.html").write_text(
+        (FIXTURES / "acm_authority.html").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (fixture_dir / "smith2026acm.acl.html").write_text("<html><body>not json</body></html>", encoding="utf-8")
+
+    main(
+        [
+            "reference-check",
+            "--lock", str(lock),
+            "--fixture-html-dir", str(fixture_dir),
+            "--source", "acl",
+            "--source", "acm",
+            "--citation-key", "smith2026acm",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    warning_codes = {warning["code"] for warning in payload["warnings"]}
+
+    assert "REFERENCE_FIXTURE_LOOKUP_FAILED" in warning_codes
+    failure = next(w for w in payload["warnings"] if w["code"] == "REFERENCE_FIXTURE_LOOKUP_FAILED")
+    assert "smith2026acm.acl.html" in " ".join(failure["evidence"])
+
+
+def test_refgate_artifact_dir_is_decided_by_location_not_spelling(tmp_path, monkeypatch):
+    """A bare claims filename used from inside .refgate/ is still inside it.
+
+    The guard compared claims_path.parent.name, which is "" for a bare
+    filename, so this layout appended a second .refgate.
+    """
+    from refgate.paper_flow import _refgate_artifact_dir_for_claims
+
+    artifacts = tmp_path / ".refgate"
+    artifacts.mkdir()
+    (artifacts / "refgate_claims.tsv").write_text("", encoding="utf-8")
+    monkeypatch.chdir(artifacts)
+
+    resolved = _refgate_artifact_dir_for_claims(Path("refgate_claims.tsv")) / "official-bibtex"
+
+    assert ".refgate/.refgate" not in str(resolved)
+    assert resolved.resolve() == (artifacts / "official-bibtex").resolve()

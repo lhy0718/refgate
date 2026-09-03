@@ -509,7 +509,15 @@ def _paper_audit_rerun_command(
 
 
 def _refgate_artifact_dir_for_claims(claims_path: Path) -> Path:
-    if claims_path.parent.name == ".refgate":
+    # Ask where the file IS, not how it is spelled. A bare filename used from
+    # inside .refgate/, or one reached through .., names the same directory and
+    # must not have a second .refgate appended. The unresolved parent is what is
+    # returned, so printed commands stay relative the way the caller wrote them.
+    try:
+        resolved_parent = claims_path.expanduser().resolve().parent
+    except OSError:
+        resolved_parent = claims_path.parent
+    if resolved_parent.name == ".refgate":
         return claims_path.parent
     return claims_path.parent / ".refgate"
 

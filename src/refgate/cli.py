@@ -852,8 +852,13 @@ def cmd_reference_check(args: argparse.Namespace) -> int:
     write_json(
         envelope(
             "reference_check_complete",
-            data={key: value for key, value in result.items() if key not in {"blocking_issues", "ok", "next_actions"}},
+            data={
+                key: value
+                for key, value in result.items()
+                if key not in {"blocking_issues", "warnings", "ok", "next_actions"}
+            },
             blocking_issues=result["blocking_issues"],
+            warnings=result.get("warnings", []),
             next_actions=result.get("next_actions", []),
         )
     )

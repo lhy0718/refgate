@@ -241,8 +241,11 @@ def _candidates_from_fixture_html(
             continue
         if first_path is None:
             first_path = path
-        html = path.read_text(encoding="utf-8")
         try:
+            # Decode the way adapters/base.py decodes a live body. A publisher
+            # page saved as cp1252 must fail this one reference, not abort the
+            # whole sweep with a traceback and no JSON envelope.
+            html = path.read_bytes().decode("utf-8", errors="replace")
             adapter = adapter_for_source(source, lambda _url, html=html: html)
             source_candidates = adapter.discover(query)
         except Exception as exc:
@@ -877,6 +880,7 @@ def run_reference_check(
     updated_lockfile = lockfile
     rows: list[dict[str, Any]] = []
     blocking: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
     updated_entries = 0
 
     wanted_keys = set(citation_keys or [])
@@ -969,8 +973,15 @@ def run_reference_check(
             "decision": decision.to_dict(),
             "lock_updated": False,
         }
+        if fixture_html_failures:
+            # A fixture that failed is worth saying so even when another source
+            # rescued the decision: the operator saved that file expecting it to
+            # be used, and only this tells them it was not.
+            row["fixture_lookup_warnings"] = fixture_html_failures
+            warnings.extend(fixture_html_failures)
         if live and decision.ok:
             row["live_lookup_warnings"] = live_lookup_failures
+            warnings.extend(live_lookup_failures)
         elif live:
             blocking.extend(live_lookup_failures)
 
@@ -1153,5 +1164,6 @@ def run_reference_check(
         "updated_entries": updated_entries,
         "results": rows,
         "blocking_issues": blocking,
+        "warnings": warnings,
         "next_actions": next_actions,
     }
