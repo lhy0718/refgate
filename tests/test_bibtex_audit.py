@@ -326,3 +326,22 @@ def test_official_export_audit_blocks_meaningful_metadata_change(original, chang
     result = audit_bibliography_result(manuscript, _lockfile_with_entry(entry), submission=True)
 
     assert any(issue.code == "OFFICIAL_EXPORT_CONTENT_CHANGED" and issue.severity == "blocking" for issue in result.issues)
+
+
+def test_normalize_title_folds_latex_quote_markup_but_keeps_double_from_single():
+    """`x' and 'x' are the same title written two ways; ``x'' is not.
+
+    An official arXiv export writes 'Fix', while a LaTeX manuscript has to write
+    `Fix' to get matching left and right quotes. That difference is markup. A
+    manuscript that quotes the word twice over, ``Fix'', is quoting differently
+    and must still be reported.
+    """
+    single_backtick = normalize_title("When VLMs `Fix' Students")
+    single_straight = normalize_title("When VLMs 'Fix' Students")
+    single_unicode = normalize_title("When VLMs ‘Fix’ Students")
+    double_latex = normalize_title("When VLMs ``Fix'' Students")
+    double_unicode = normalize_title("When VLMs “Fix” Students")
+
+    assert single_backtick == single_straight == single_unicode
+    assert double_latex == double_unicode
+    assert double_latex != single_backtick

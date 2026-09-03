@@ -10,7 +10,13 @@ from .models import AuditIssue, AuthorityRecord, CandidateRecord, PaperQuery, Re
 def normalize_title(title: str) -> str:
     text = unicodedata.normalize("NFKC", title).lower().strip()
     text = re.sub(r"\\+([&%_$#{}])", r"\1", text)
-    text = text.replace("’", "'").replace("‘", "'")
+    # LaTeX spells the same quotation marks several ways: ``x'' and “x” are the
+    # double form, `x' and 'x' the single one. Fold each form to one character so
+    # that markup alone is not a mismatch. Doubles are folded first, and to a
+    # different character, so a double-quoted title still fails to match a
+    # single-quoted one -- that difference is in the title, not the markup.
+    text = text.replace("``", '"').replace("''", '"').replace("“", '"').replace("”", '"')
+    text = text.replace("`", "'").replace("‘", "'").replace("’", "'")
     text = text.replace("{", "").replace("}", "")
     text = text.replace("‐", "-").replace("‑", "-").replace("–", "-").replace("—", "-")
     text = re.sub(r"\s+", " ", text)
