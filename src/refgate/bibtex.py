@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from collections.abc import Iterator
 
 
 ENTRY_RE = re.compile(r"@\s*(?P<type>\w+)\s*\{\s*(?P<key>[^,\s]+)\s*,(?P<body>.*)\}\s*$", re.DOTALL)
@@ -201,18 +202,17 @@ def rekey_bibtex_entry(text: str, citation_key: str) -> str:
     return f"@{match.group('type')}{{{citation_key},{match.group('body')}}}\n"
 
 
-def split_bibtex_entries(text: str) -> list[str]:
-    """Split a .bib file into entry texts.
+def iter_bibtex_entry_bounds(text: str) -> Iterator[tuple[int, int]]:
+    """Yield ``(start, end)`` offsets for each BibTeX entry in ``text``.
 
     Each entry ends at its own balanced closing brace rather than at the next
     ``@``. BibTeX ignores everything between entries, so comment lines and prose
-    there must not be appended to the preceding entry.
+    there belong to no entry and must not be absorbed by the preceding one.
+    An entry whose braces never balance runs to the end of the text.
     """
-    entries: list[str] = []
     for match in re.finditer(r"@\s*\w+\s*\{", text):
-        start = match.start()
         depth = 0
-        end: int | None = None
+        end = len(text)
         for index in range(match.end() - 1, len(text)):
             char = text[index]
             if char == "{":
@@ -222,8 +222,12 @@ def split_bibtex_entries(text: str) -> list[str]:
                 if depth == 0:
                     end = index + 1
                     break
-        entries.append(text[start:end].strip() if end is not None else text[start:].strip())
-    return entries
+        yield match.start(), end
+
+
+def split_bibtex_entries(text: str) -> list[str]:
+    """Split a .bib file into entry texts, dropping the prose between them."""
+    return [text[start:end].strip() for start, end in iter_bibtex_entry_bounds(text)]
 
 
 def _parse_string_macro(entry_text: str) -> tuple[str, str] | None:

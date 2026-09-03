@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from .bibtex import (
+    iter_bibtex_entry_bounds,
     bibtex_entries_semantically_equal,
     bibtex_semantic_sha256,
     parse_bibtex_entry,
@@ -36,10 +37,8 @@ class BibtexSpan:
 
 
 def _bibtex_spans(text: str) -> list[BibtexSpan]:
-    starts = [match.start() for match in re.finditer(r"@\s*\w+\s*\{", text)]
     spans: list[BibtexSpan] = []
-    for index, start in enumerate(starts):
-        end = starts[index + 1] if index + 1 < len(starts) else len(text)
+    for start, end in iter_bibtex_entry_bounds(text):
         entry_text = text[start:end].strip()
         citation_key: str | None = None
         kind = re.match(r"@\s*(\w+)", entry_text)
@@ -286,14 +285,19 @@ def sync_bibtex(
         preface = bib_text[: spans[0].start].strip() if spans else ""
         if preface:
             chunks.append(preface)
-        for span in spans:
+        for index, span in enumerate(spans):
             if span.citation_key in replacements:
                 chunks.append(_entry_text(replacements[span.citation_key]))
             else:
                 chunks.append(_entry_text(bib_text[span.start : span.end]))
-        tail = bib_text[spans[-1].end :].strip() if spans else bib_text.strip()
-        if tail:
-            chunks.append(tail)
+            # A span now stops at its own closing brace, so the text up to the
+            # next entry -- provenance comments and other prose -- is emitted
+            # here instead of being carried inside (and overwritten with) the
+            # entry it happens to follow.
+            gap_end = spans[index + 1].start if index + 1 < len(spans) else len(bib_text)
+            gap = bib_text[span.end : gap_end].strip()
+            if gap:
+                chunks.append(gap)
         synced_text = _join_bibtex_blocks(chunks)
 
     if additions:

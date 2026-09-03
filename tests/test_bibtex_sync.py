@@ -271,3 +271,67 @@ def test_sync_bibtex_semantic_noop_plan_and_output_are_consistent(tmp_path, caps
     assert write_exit == 0
     assert written["data"]["change_count"] == 0
     assert output.read_bytes() == bib.read_bytes()
+
+
+def test_sync_bibtex_replaces_entry_followed_by_comment_and_keeps_the_comment(tmp_path, capsys):
+    """A comment between two entries belongs to neither of them.
+
+    Spans used to run to the next ``@``, so the comment was parsed as part of
+    the entry above it. That entry's citation key then failed to parse, and
+    ``sync-bibtex`` reported it as missing from the bib -- while still exiting
+    ``ok``. Had the key parsed, the replacement would have overwritten the
+    comment instead.
+    """
+    first = """@article{doe2026refgate,
+  title = {Official Title},
+  author = {Doe, Jane},
+  year = {2026},
+  doi = {10.1234/refgate.2026}
+}
+"""
+    second = """@article{roe2026refgate,
+  title = {Official Title},
+  author = {Doe, Jane},
+  year = {2026},
+  doi = {10.1234/refgate.2026}
+}
+"""
+    lock_data = {
+        "schema_version": "refgate.lock.v1",
+        "entries": [_lock_entry("doe2026refgate", first), _lock_entry("roe2026refgate", second)],
+    }
+    lock_data["entries"][0]["bibtex"]["normalized_sha256"] = sha256_text(first)
+    lock_data["entries"][1]["bibtex"]["normalized_sha256"] = sha256_text(second)
+    lock = tmp_path / "refgate.lock.json"
+    bib = tmp_path / "references.bib"
+    output = tmp_path / "references.refgate.bib"
+    lock.write_text(json.dumps(lock_data), encoding="utf-8")
+    bib.write_text(
+        """@article{doe2026refgate,
+  title = {Draft Title},
+  author = {Doe, Jane},
+  year = {2026}
+}
+
+% why this reference is cited here
+% second line of the same note
+
+@article{roe2026refgate,
+  title = {Draft Title},
+  author = {Doe, Jane},
+  year = {2026}
+}
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["sync-bibtex", "--bib", str(bib), "--lock", str(lock), "--output", str(output), "--json"])
+    result = json.loads(capsys.readouterr().out)
+    written = output.read_text(encoding="utf-8")
+
+    assert exit_code == 0
+    assert [action["action"] for action in result["data"]["actions"]] == ["replace", "replace"]
+    assert "Draft Title" not in written
+    assert "% why this reference is cited here" in written
+    assert "% second line of the same note" in written
+    assert written.index("doe2026refgate") < written.index("% why this") < written.index("roe2026refgate")
