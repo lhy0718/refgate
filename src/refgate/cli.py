@@ -15,6 +15,7 @@ from .bibtex_sync import sync_bibtex
 from .bootstrap import bootstrap_lock_from_bib, bootstrap_paper
 from .claim_audit import audit_claims_table, audit_tex_bib_consistency, render_claim_review_report, suggest_claim_evidence, suggest_claim_evidence_bundle, update_claim_stub_file_from_sources
 from .claim_consistency import review_claim_consistency
+from .official_origin import verify_official_bibtex_origin
 from .claim_source_check import run_claim_source_check
 from .codex_review import import_codex_review, write_codex_review_bundle
 from .fixture_matrix import validate_fixture_matrix
@@ -829,6 +830,25 @@ def cmd_fixture_matrix(args: argparse.Namespace) -> int:
     candidates_data = load_json(args.candidates)
     result = validate_fixture_matrix(queries_data, candidates_data)
     write_json(envelope("fixture_matrix_validated", data=result, blocking_issues=[] if result["ok"] else [{"code": "FIXTURE_MATRIX_INCOMPLETE", "message": "Fixture matrix has missing or blocking rows."}]))
+    return 0 if result["ok"] else 1
+
+
+def cmd_verify_official_bibtex(args: argparse.Namespace) -> int:
+    result = verify_official_bibtex_origin(
+        lock=args.lock,
+        official_bibtex_dir=args.official_bibtex_dir,
+        live=args.live,
+        write_lock=args.write_lock,
+        citation_keys=args.citation_key,
+    )
+    write_json(
+        envelope(
+            "official_bibtex_origin_checked",
+            data={key: value for key, value in result.items() if key not in {"blocking_issues", "warnings", "ok"}},
+            blocking_issues=result["blocking_issues"],
+            warnings=result["warnings"],
+        )
+    )
     return 0 if result["ok"] else 1
 
 
@@ -1660,6 +1680,19 @@ def build_parser() -> argparse.ArgumentParser:
     reference_check_parser.add_argument("--live", action="store_true")
     reference_check_parser.add_argument("--json", action="store_true")
     reference_check_parser.set_defaults(func=cmd_reference_check)
+
+    verify_origin_parser = subparsers.add_parser("verify-official-bibtex")
+    verify_origin_parser.add_argument("--lock", required=True)
+    verify_origin_parser.add_argument("--official-bibtex-dir", required=True)
+    verify_origin_parser.add_argument("--citation-key", action="append")
+    verify_origin_parser.add_argument("--write-lock")
+    verify_origin_parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Re-fetch each export from the publisher and compare bytes. Without it nothing is checked.",
+    )
+    verify_origin_parser.add_argument("--json", action="store_true")
+    verify_origin_parser.set_defaults(func=cmd_verify_official_bibtex)
 
     monitor_parser = subparsers.add_parser("monitor-official-records")
     monitor_parser.add_argument("--lock", required=True)

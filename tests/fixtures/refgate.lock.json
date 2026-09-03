@@ -17,7 +17,9 @@
       "status": "verified_official_bibtex",
       "record": {
         "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
-        "authors": ["Edoardo Debenedetti"],
+        "authors": [
+          "Edoardo Debenedetti"
+        ],
         "year": 2024,
         "venue": "NeurIPS",
         "doi": null,
@@ -45,13 +47,22 @@
           "url": "checked",
           "doi": "missing",
           "arxiv_id": "checked"
+        },
+        "origin_check": {
+          "url": "https://proceedings.neurips.cc/paper_files/paper/23699-/bibtex",
+          "checked_at": "2026-05-19",
+          "result": "match",
+          "local_sha256": "e6bc2ebec66dbfb5e7327a70d4fc3d85095d79f5f24c41ece6f04307881c9580",
+          "remote_sha256": "e6bc2ebec66dbfb5e7327a70d4fc3d85095d79f5f24c41ece6f04307881c9580"
         }
       },
       "resolver": {
         "score": 100,
         "blocking_issues": [],
         "warnings": [],
-        "decision_trace": ["fixture"]
+        "decision_trace": [
+          "fixture"
+        ]
       },
       "checked_at": "2026-05-19",
       "checked_by": "refgate"

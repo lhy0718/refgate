@@ -9,6 +9,7 @@ from .bibtex import (
     split_bibtex_entries,
 )
 from .models import AuditIssue, Lockfile
+from .official_origin import origin_audit_issues
 from .resolver import normalize_author, normalize_title
 
 PASSING_STATUSES = {
@@ -362,6 +363,9 @@ def audit_bibliography_result(bib_text: str, lockfile: Lockfile, submission: boo
                     citation_key=citation_key,
                 )
             )
+    # An official export is only as good as its origin, and nothing above checks
+    # that: the source_kind is assigned from the directory a file sits in.
+    issues.extend(origin_audit_issues(lockfile, submission=submission))
     return BibliographyAuditResult(issues=issues, accepted_provenance_notes=accepted_provenance_notes)
 
 

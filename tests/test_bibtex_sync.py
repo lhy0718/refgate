@@ -36,6 +36,13 @@ def _lock_entry(citation_key: str, canonical_text: str) -> dict:
                 "bibtex_source": "official_export",
                 "exported_citation_key": "publisher-key",
             },
+            "origin_check": {
+                "url": "https://publisher.example/refgate.bib",
+                "checked_at": "2026-05-23",
+                "result": "match",
+                "local_sha256": "unused",
+                "remote_sha256": "unused",
+            },
         },
         "resolver": {"score": 100, "blocking_issues": [], "warnings": [], "decision_trace": []},
         "checked_at": "2026-05-23",
