@@ -10,6 +10,7 @@ from .bibtex import parse_bibtex_file
 from .evidence_policy import is_weak_evidence_kind
 from .models import AuditIssue
 from .source_text import read_source_text
+from .tex import strip_tex_comment
 
 
 PASSING_CLAIM_STATUSES = {"checked", "checked_arxiv"}
@@ -129,7 +130,10 @@ def extract_citation_keys(tex_text: str) -> set[str]:
 
 
 def _strip_tex_commands(text: str) -> str:
-    text = re.sub(r"%.*", "", text)
+    # `\%` is a percent sign, not the start of a comment. A blunt `%.*` here
+    # deletes the rest of the line after every escaped percent, silently
+    # truncating any claim that quotes a figure.
+    text = "\n".join(strip_tex_comment(line) for line in text.split("\n"))
     text = HEADING_COMMAND_RE.sub(" ", text)
     text = re.sub(r"\\(textbf|emph)\*?(?:\[[^\]]*\])?\{([^{}]*)\}", r"\2", text)
     return re.sub(r"\s+", " ", text).strip()
@@ -149,7 +153,7 @@ def _paragraph_spans(tex_text: str) -> list[tuple[str, list[int]]]:
         line_map = []
 
     for line_number, raw_line in enumerate(tex_text.splitlines(), start=1):
-        line = re.sub(r"%.*", "", raw_line).strip()
+        line = strip_tex_comment(raw_line).strip()
         if not line:
             flush()
             continue
@@ -217,11 +221,18 @@ def _nearest_clause_boundary(text: str) -> int:
 def _claim_text_for_citation(sentence: str, match_index: int, matches: list[re.Match[str]]) -> str:
     citation = matches[match_index]
     previous_end = matches[match_index - 1].end() if match_index else 0
+    next_start = matches[match_index + 1].start() if match_index + 1 < len(matches) else len(sentence)
     prefix = sentence[previous_end : citation.start()]
     boundary = _nearest_clause_boundary(prefix)
-    if boundary >= 0:
-        prefix = prefix[boundary + 1 :]
-    claim_text = _strip_citation_commands(prefix)
+    offset = previous_end + boundary + 1 if boundary >= 0 else previous_end
+    # A narrative citation is the subject of its sentence -- "Smith et al.
+    # (2020) report a 12 point drop" -- so its assertion comes AFTER the marker
+    # and a prefix-only window keeps the lead-in and drops the claim. A
+    # parenthetical one trails the assertion it supports, so the prefix is right.
+    command = re.match(r"\\cite([a-zA-Z*]*)", citation.group(0))
+    kind = command.group(1) if command else ""
+    narrative = kind.startswith("t") or kind.startswith("author")
+    claim_text = _strip_citation_commands(sentence[offset : next_start if narrative else citation.start()])
     if len(claim_text.split()) >= 3:
         return claim_text
     return _strip_citation_commands(sentence)

@@ -848,6 +848,7 @@ def cmd_reference_check(args: argparse.Namespace) -> int:
         max_entries=args.max_entries,
         fetch_official_bibtex=args.fetch_official_bibtex,
         citation_keys=args.citation_key,
+        allow_downgrade=args.allow_downgrade,
     )
     write_json(
         envelope(
@@ -1647,6 +1648,11 @@ def build_parser() -> argparse.ArgumentParser:
     reference_check_parser.add_argument("--cache-root", default=".refgate/cache")
     reference_check_parser.add_argument("--prefer-cache", action="store_true")
     reference_check_parser.add_argument("--write-lock")
+    reference_check_parser.add_argument(
+        "--allow-downgrade",
+        action="store_true",
+        help="Permit a write that replaces stronger provenance with weaker provenance.",
+    )
     reference_check_parser.add_argument("--fallback-reason")
     reference_check_parser.add_argument("--max-entries", type=int)
     reference_check_parser.add_argument("--citation-key", action="append")

@@ -2095,3 +2095,69 @@ def test_refgate_artifact_dir_is_decided_by_location_not_spelling(tmp_path, monk
 
     assert ".refgate/.refgate" not in str(resolved)
     assert resolved.resolve() == (artifacts / "official-bibtex").resolve()
+
+
+def test_reference_check_refuses_to_replace_stronger_provenance_with_weaker(tmp_path, capsys):
+    """A mistyped --official-bibtex-dir used to demote a verified entry in silence.
+
+    Nothing compared a write against the record it replaced, so an entry could
+    go from official_export to a manual fallback with warnings empty and exit 0.
+    """
+    lock_data = _minimal_lock("doe2019paper", title="A Paper About Things")
+    entry = lock_data["entries"][0]
+    entry["status"] = "verified_official_bibtex"
+    entry["bibtex"] = {"citation_key": "doe2019paper", "source_kind": "official_export"}
+    lock = tmp_path / "refgate.lock.json"
+    lock.write_text(json.dumps(lock_data), encoding="utf-8")
+
+    candidates = tmp_path / "candidates"
+    candidates.mkdir()
+    (candidates / "doe2019paper.json").write_text(
+        json.dumps(
+            {
+                "citation_key": "doe2019paper",
+                "candidates": [
+                    {
+                        "source": "acm",
+                        "title": "A Paper About Things",
+                        "authors": ["Jane Doe"],
+                        "year": 2019,
+                        "venue": "Proceedings of Somewhere",
+                        "doi": "10.1234/refgate.2019",
+                        "url": "https://publisher.example/doe2019",
+                        "is_official_record": True,
+                        "source_priority": 1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    reviewed = tmp_path / "reviewed-bibtex"
+    reviewed.mkdir()
+    (reviewed / "doe2019paper.bib").write_text(
+        '@inproceedings{doe2019paper,\n  title = {A Paper About Things},\n'
+        '  author = {Doe, Jane},\n  year = {2019},\n  doi = {10.1234/refgate.2019}\n}\n',
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "reference-check",
+            "--lock", str(lock),
+            "--candidate-dir", str(candidates),
+            "--official-bibtex-dir", str(tmp_path / "official-bibtex-TYPO"),
+            "--bibtex-dir", str(reviewed),
+            "--citation-key", "doe2019paper",
+            "--write-lock", str(lock),
+            "--fallback-reason", "reviewed",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    after = json.loads(lock.read_text(encoding="utf-8"))["entries"][0]
+
+    assert exit_code == 1
+    assert "PROVENANCE_DOWNGRADE_BLOCKED" in {i["code"] for i in payload["blocking_issues"]}
+    assert after["status"] == "verified_official_bibtex"
+    assert after["bibtex"]["source_kind"] == "official_export"

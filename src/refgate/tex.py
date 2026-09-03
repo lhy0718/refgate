@@ -28,7 +28,8 @@ class TexDocument:
         return "\n\n".join(source.text for source in self.sources)
 
 
-def _strip_tex_comment(line: str) -> str:
+def strip_tex_comment(line: str) -> str:
+    """Return the line up to its first unescaped ``%``."""
     escaped = False
     for index, char in enumerate(line):
         if char == "%" and not escaped:
@@ -42,7 +43,7 @@ def _strip_tex_comment(line: str) -> str:
 def _include_targets(text: str) -> list[str]:
     targets: list[str] = []
     for raw_line in text.splitlines():
-        line = _strip_tex_comment(raw_line)
+        line = strip_tex_comment(raw_line)
         for match in re.finditer(r"\\(?:input|include)\s*\{([^{}]+)\}", line):
             target = match.group(1).strip()
             if target:

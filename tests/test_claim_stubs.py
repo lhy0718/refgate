@@ -90,3 +90,48 @@ def test_generate_claim_stubs_does_not_prefix_headings_to_first_citation_sentenc
         "ReAct augments language models with an action space",
         "AuthBench evaluates file-level permission policies",
     ]
+
+
+def test_generate_claim_stubs_keeps_an_escaped_percent():
+    r"""`\%` is a percent sign. A blunt `%.*` strip deleted the rest of the line.
+
+    Every claim that quoted a figure lost its number and everything after it.
+    """
+    tex_text = "They report drops of up to 28.28\\% where human performance is stable \\citep{wu2026}."
+
+    stubs = generate_claim_stubs(tex_text)
+
+    assert len(stubs) == 1
+    assert "\\%" in stubs[0].claim_text
+    # The point of the fix: everything after the escaped percent survives.
+    assert stubs[0].claim_text.endswith("where human performance is stable")
+
+
+def test_generate_claim_stubs_keeps_the_assertion_after_a_narrative_citation():
+    """A narrative citation is the sentence subject, so its claim follows it.
+
+    The window ran from the previous citation to this one, so a \\citet stub
+    recorded only the lead-in -- "The closest prior result is" -- and the
+    numbers being attributed were in no claim row at all.
+    """
+    tex_text = "The closest prior result is \\citet{ravichander2021}, who find 11.1 against 2.4 F1."
+
+    stubs = generate_claim_stubs(tex_text)
+
+    assert len(stubs) == 1
+    assert "11.1 against 2.4 F1" in stubs[0].claim_text
+
+
+def test_generate_claim_stubs_still_splits_parenthetical_citations_locally():
+    """A parenthetical citation trails the assertion it supports; keep the prefix."""
+    tex_text = (
+        "Tool-use benchmarks expose prompt-injection attacks \\citep{alpha2024}, "
+        "while policy benchmarks cover permission misuse \\citep{beta2025}."
+    )
+
+    stubs = generate_claim_stubs(tex_text)
+
+    assert [stub.claim_text for stub in stubs] == [
+        "Tool-use benchmarks expose prompt-injection attacks",
+        "policy benchmarks cover permission misuse",
+    ]

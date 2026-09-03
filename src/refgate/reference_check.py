@@ -225,6 +225,18 @@ def _fetch_official_bibtex(
     return official_bibtex_record(default_fetcher(authority.bibtex_url))
 
 
+PROVENANCE_STRENGTH = {
+    "official_export": 3,
+    "arxiv_manual_normalized": 2,
+    "publisher_metadata_manual_normalized": 2,
+}
+
+
+def _provenance_strength(source_kind: str | None) -> int:
+    """How much a provenance kind is worth, so a write can tell a step down."""
+    return PROVENANCE_STRENGTH.get(source_kind or "", 1)
+
+
 def _candidates_from_fixture_html(
     *,
     fixture_html_dir: Path,
@@ -867,6 +879,7 @@ def run_reference_check(
     cache_root: str | Path = ".refgate/cache",
     prefer_cache: bool = False,
     write_lock: str | Path | None = None,
+    allow_downgrade: bool = False,
     fallback_reason: str | None = None,
     max_entries: int | None = None,
     fetch_official_bibtex: bool = False,
@@ -1114,6 +1127,32 @@ def run_reference_check(
                 citation_key=entry.citation_key,
                 fallback_reason=fallback_reason,
             )
+            existing = updated_lockfile.by_citation_key().get(entry.citation_key)
+            existing_kind = (existing.bibtex or {}).get("source_kind") if existing else None
+            new_kind = (lock_entry.bibtex or {}).get("source_kind")
+            # Nothing else compares a write against what it replaces, so a
+            # mistyped --official-bibtex-dir used to turn a verified official
+            # export into a fallback without a word. Provenance only moves up
+            # unless the operator says otherwise.
+            if not allow_downgrade and _provenance_strength(existing_kind) > _provenance_strength(new_kind):
+                blocking.append(
+                    {
+                        "code": "PROVENANCE_DOWNGRADE_BLOCKED",
+                        "message": (
+                            "This write would replace stronger provenance with weaker provenance. "
+                            "Check the inputs, or pass --allow-downgrade if the demotion is intended."
+                        ),
+                        "citation_key": entry.citation_key,
+                        "evidence": [
+                            f"recorded: {existing.status if existing else 'none'} / {existing_kind}",
+                            f"incoming: {lock_entry.status} / {new_kind}",
+                        ],
+                    }
+                )
+                row["lock_updated"] = False
+                row["downgrade_blocked"] = True
+                rows.append(row)
+                continue
             updated_lockfile = merge_lock_entry(updated_lockfile, lock_entry)
             updated_entries += 1
             row["lock_updated"] = True
