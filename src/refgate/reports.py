@@ -155,14 +155,13 @@ def render_markdown_report(
     lines.extend(
         [
             "",
-            "## Submission Checklist",
+            "## Gate Scope and Author Review",
             "",
-            f"- [{'x' if not blocking else ' '}] Blocking issue count is zero.",
-            "- [ ] Every citation key has a lockfile entry.",
-            "- [ ] Official BibTeX export entries use `official_export`.",
-            "- [ ] Manual fallback entries include fallback reason and field checks.",
-            "- [ ] arXiv fallback entries include version and accessed date.",
-            "- [ ] Important claims have source locations and evidence spans.",
+            f"- Blocking issues reported: {len(blocking)}.",
+            "- Phase results above cover only the checks executed by this command.",
+            "- A clear deterministic gate does not certify semantic support or submission readiness.",
+            "- Author review remains necessary for compound claims, source-version equivalence,",
+            "  follow-on assertions, and data or repository dependencies without citations.",
         ]
     )
     lines.append("")

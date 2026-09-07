@@ -236,7 +236,12 @@ def test_cli_paper_audit_separates_accepted_provenance_notes(tmp_path, capsys):
 
     payload = json.loads(capsys.readouterr().out)
     report_text = report.read_text(encoding="utf-8")
-    assert exit_code == 0
+    # Accepted bibliography provenance does not waive missing source verification
+    # or a claims table whose contexts do not match the manuscript.
+    assert exit_code == 1
+    assert {issue["code"] for issue in payload["blocking_issues"]} >= {
+        "CLAIM_SOURCE_MAP_REQUIRED", "CLAIM_CURRENT_CONTEXT_UNREVIEWED",
+    }
     assert payload["warnings"] == []
     accepted = payload["data"]["accepted_provenance_notes"]
     assert [note["code"] for note in accepted] == ["DOI_MISSING"]
@@ -748,7 +753,7 @@ def test_cli_paper_audit_external_source_map_output_keeps_sources_readable(tmp_p
     source_map = external_dir / "source_map.tsv"
     source_text = source_dir / "debenedetti2024agentdojo.txt"
     tex.parent.mkdir(parents=True, exist_ok=True)
-    tex.write_text((FIXTURES / "manuscript.tex").read_text(encoding="utf-8"), encoding="utf-8")
+    tex.write_text(r"AgentDojo evaluates prompt injection attacks and defenses for tool-using agents \cite{debenedetti2024agentdojo}.", encoding="utf-8")
     bib.write_text((FIXTURES / "sample.bib").read_text(encoding="utf-8"), encoding="utf-8")
     lock.write_text((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8"), encoding="utf-8")
     claims.write_text(
@@ -1427,6 +1432,63 @@ def test_cli_run_summary_passes_clean_run_log(tmp_path, capsys):
     assert payload["data"]["ok"] is True
     assert payload["data"]["remaining_count"] == 0
     assert payload["data"]["status_counts"]["succeeded"] == 1
+
+
+def test_cli_run_summary_reconciles_plan_with_successful_run_log(tmp_path, capsys):
+    plan = tmp_path / "next_plan.json"
+    run_log = tmp_path / "next_run_log.json"
+    base_action = {
+        "index": 0,
+        "code": "VALIDATE_SOURCE_TEXT",
+        "kind": "validation_command",
+        "citation_key": "",
+        "command_field": "command",
+        "command": "python -m refgate validate-source-text --text source.txt --json",
+    }
+    plan.write_text(
+        json.dumps(
+            {
+                "schema_version": "refgate.next_actions.v2",
+                "ok": True,
+                "execute": False,
+                "selected_count": 1,
+                "failed_count": 0,
+                "actions": [{**base_action, "selected": True}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    run_log.write_text(
+        json.dumps(
+            {
+                "schema_version": "refgate.next_actions.v2",
+                "ok": True,
+                "execute": True,
+                "selected_count": 1,
+                "failed_count": 0,
+                "actions": [
+                    {
+                        **base_action,
+                        "selected": True,
+                        "executed": True,
+                        "returncode": 0,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        ["run-summary", "--input", str(plan), "--input", str(run_log), "--json"]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["data"]["ok"] is True
+    assert payload["data"]["action_count"] == 1
+    assert payload["data"]["remaining_count"] == 0
+    assert payload["data"]["status_counts"] == {"succeeded": 1}
 
 
 def test_bootstrapped_lock_blocks_submission_until_resolved(tmp_path, capsys):

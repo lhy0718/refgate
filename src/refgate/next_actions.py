@@ -435,12 +435,24 @@ def _action_status(action: dict[str, Any]) -> str:
     return f"skipped_{action.get('skip_reason') or 'unknown'}"
 
 
+def _action_identity(action: dict[str, Any]) -> tuple[Any, ...]:
+    """Identify the same logical action across a plan and its run log."""
+    return (
+        action.get("index"),
+        action.get("code", ""),
+        action.get("kind", ""),
+        action.get("citation_key", ""),
+        action.get("command_field"),
+        action.get("command"),
+    )
+
+
 def summarize_next_action_manifests(paths: list[str | Path]) -> dict[str, Any]:
     manifests = []
     status_counts: dict[str, int] = {}
     failed_actions = []
     remaining_actions = []
-    action_count = 0
+    logical_actions: dict[tuple[Any, ...], tuple[str, dict[str, Any]]] = {}
     for path in paths:
         manifest_path = str(path)
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -457,20 +469,25 @@ def summarize_next_action_manifests(paths: list[str | Path]) -> dict[str, Any]:
             }
         )
         for action in actions:
-            action_count += 1
-            status = _action_status(action)
-            status_counts[status] = status_counts.get(status, 0) + 1
-            compact = _compact_action(manifest_path, action, status)
-            if status == "failed":
-                failed_actions.append(compact)
-                remaining_actions.append(compact)
-            elif status != "succeeded":
-                remaining_actions.append(compact)
+            identity = _action_identity(action)
+            previous = logical_actions.get(identity)
+            if previous is None or action.get("executed") or not previous[1].get("executed"):
+                logical_actions[identity] = (manifest_path, action)
+
+    for manifest_path, action in logical_actions.values():
+        status = _action_status(action)
+        status_counts[status] = status_counts.get(status, 0) + 1
+        compact = _compact_action(manifest_path, action, status)
+        if status == "failed":
+            failed_actions.append(compact)
+            remaining_actions.append(compact)
+        elif status != "succeeded":
+            remaining_actions.append(compact)
     return {
         "schema_version": NEXT_ACTION_SUMMARY_SCHEMA_VERSION,
         "ok": not failed_actions and not remaining_actions,
         "manifest_count": len(paths),
-        "action_count": action_count,
+        "action_count": len(logical_actions),
         "status_counts": status_counts,
         "failed_count": len(failed_actions),
         "remaining_count": len(remaining_actions),

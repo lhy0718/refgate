@@ -105,6 +105,17 @@ python -m build
 
 ## CLI Examples
 
+In submission mode, `paper-audit` requires mapped source files for every cited
+claim, even if its evidence and `checked` status already exist. Empty source
+maps cannot pass title verification, and skipped verification phases report
+`not_run`. The audit also compares current citation contexts with the claim
+table. After editing the manuscript, use `--update-claims` to append new contexts
+and review them; older approvals are preserved, not transferred to changed text.
+Manually review numerical or methodological assertions after the citation-bearing
+sentence as well: automatic context extraction is not complete semantic coverage.
+Lexical consistency tolerates common inflections and PDF line wrapping, but
+overlap is only a review heuristic, not proof that a source supports a claim.
+
 ```bash
 python -m refgate bootstrap-paper --tex path/to/main.tex --bib path/to/references.bib --lock-output path/to/refgate.lock.json --claims-output path/to/refgate_claims.tsv --json
 python -m refgate paper-audit --tex path/to/main.tex --bib path/to/references.bib --lock path/to/refgate.lock.json --claims path/to/refgate_claims.tsv --report path/to/refgate_audit.md --resolver-output path/to/refgate_queries.json --next-plan-output path/to/.refgate/next_plan.json --submission --json

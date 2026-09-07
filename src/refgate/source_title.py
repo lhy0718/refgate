@@ -302,6 +302,12 @@ def check_source_titles(
     results: list[dict[str, Any]] = []
     issues: list[AuditIssue] = []
     warnings: list[AuditIssue] = []
+    if not rows:
+        issues.append(AuditIssue(
+            code="SOURCE_TITLE_NO_SOURCES",
+            message="No mapped sources were available for title verification.",
+            severity="blocking",
+        ))
     seen: set[tuple[str, str]] = set()
     pdf_sources = [row["source_text"] for row in rows if Path(row["source_text"]).suffix.lower() == ".pdf"]
     if pdf_sources and not pdf_text_extraction_available():

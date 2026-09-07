@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import re
+import unicodedata
 from typing import Any
 
 from .claim_audit import _claim_terms, read_claim_rows
@@ -24,6 +26,31 @@ STRONG_CLAIM_TERMS = {
     "state-of-the-art",
 }
 HEDGE_TERMS = {"approximately", "can", "could", "indicate", "indicates", "may", "might", "suggest", "suggests"}
+
+
+def _overlap_terms(text: str) -> set[str]:
+    """Lexical hints tolerate PDF wrapping and common English inflections.
+
+    This is not entailment checking. Keep raw terms for strength/hedge checks,
+    and count distinct stems rather than several variants of one word.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"(?<=[A-Za-z])-\s+(?=[a-z])", "", text)
+    text = text.replace("-", " ").replace("_", " ")
+    stems = set()
+    for term in _claim_terms(text):
+        if len(term) > 7 and term.endswith("ally"):
+            term = term[:-4]
+        elif len(term) > 5 and term.endswith("ies"):
+            term = term[:-3] + "y"
+        elif len(term) > 5 and term.endswith("ing"):
+            term = term[:-3]
+        elif len(term) > 5 and term.endswith("ed"):
+            term = term[:-2]
+        elif len(term) > 4 and term.endswith("s") and not term.endswith(("ss", "is", "us")):
+            term = term[:-1]
+        stems.add(term)
+    return stems
 
 
 @dataclass
@@ -51,6 +78,7 @@ def review_claim_consistency(
     results: list[ClaimConsistencyResult] = []
     issues: list[AuditIssue] = []
     for row in rows:
+        row_issue_start = len(issues)
         claim_id = row.get("claim_id", "").strip()
         status = row.get("status", "").strip() or "claim_unchecked"
         citation_key = row.get("citation_key", "").strip()
@@ -58,9 +86,9 @@ def review_claim_consistency(
         evidence_kind = row.get("evidence_kind", "").strip()
         claim_terms = _claim_terms(row.get("claim_text", ""))
         evidence_terms = _claim_terms(evidence)
-        shared = sorted(claim_terms & evidence_terms)
+        shared = sorted(_overlap_terms(row.get("claim_text", "")) & _overlap_terms(evidence))
         strong_terms = sorted(claim_terms & STRONG_CLAIM_TERMS)
-        has_evidence_hedge = bool(evidence_terms & HEDGE_TERMS)
+        has_evidence_hedge = bool(set(re.findall(r"[A-Za-z]+", evidence.lower())) & HEDGE_TERMS)
         enough_overlap = len(shared) >= min_overlap
         passing_status = status in PASSING_STATUSES
         ok = bool(evidence) and enough_overlap and (passing_status or not require_passing_status)
@@ -94,7 +122,7 @@ def review_claim_consistency(
                     evidence=shared,
                 )
             )
-        if strong_terms and evidence and (len(shared) < min_overlap + 1 or has_evidence_hedge):
+        if strong_terms and evidence and (len(claim_terms & evidence_terms) < min_overlap + 1 or has_evidence_hedge):
             issues.append(
                 AuditIssue(
                     code="CLAIM_MAY_BE_TOO_STRONG",
@@ -129,4 +157,7 @@ def review_claim_consistency(
                     evidence=[evidence_kind],
                 )
             )
+        # A row cannot pass while its own consistency checks are blocking.
+        if any(issue.severity == "blocking" for issue in issues[row_issue_start:]):
+            result.ok = False
     return results, issues

@@ -14,6 +14,7 @@ from .claim_audit import (
     _row_citation_keys,
     audit_claims_table,
     audit_tex_bib_consistency,
+    generate_claim_stubs,
     read_claim_rows,
     render_claim_review_report,
     update_claim_stub_file_from_sources,
@@ -814,6 +815,8 @@ def build_paper_audit_next_actions(
         )
 
     claim_blocking_codes = {
+        "CLAIM_SOURCE_MAP_REQUIRED",
+        "CLAIM_CURRENT_CONTEXT_UNREVIEWED",
         "CLAIM_NOT_CHECKED",
         "CLAIM_STATUS_NOT_FINAL",
         "CLAIM_EVIDENCE_MISSING",
@@ -1095,6 +1098,29 @@ def run_paper_audit(
     issues.extend(tex_document.issues)
     issues.extend(audit_tex_bib_consistency(tex_text, bib_text, submission=submission))
     issues.extend(audit_claims_table(claims_path, submission=submission))
+    reviewed_contexts = {
+        (row.get("claim_text", "").strip(), key)
+        for row in read_claim_rows(claims_path)
+        for key in _row_citation_keys(row.get("citation_key", ""))
+    }
+    for source in tex_document.sources:
+        for stub in generate_claim_stubs(source.text, source_file=source.display_path):
+            if not stub.claim_text.strip():
+                continue
+            if (stub.claim_text, stub.citation_key) not in reviewed_contexts:
+                issues.append(AuditIssue(
+                    code="CLAIM_CURRENT_CONTEXT_UNREVIEWED",
+                    message="Current manuscript citation context is absent from the claim table; refresh and review it.",
+                    severity="blocking" if submission else "warning",
+                    citation_key=stub.citation_key,
+                    evidence=[stub.manuscript_location, stub.claim_text],
+                ))
+    if reviewed_contexts and not active_source_map:
+        issues.append(AuditIssue(
+            code="CLAIM_SOURCE_MAP_REQUIRED",
+            message="Source verification was not run; provide a source map or source directory.",
+            severity="blocking" if submission else "warning",
+        ))
     if claim_source_check:
         issues.extend(
             _issue_from_payload(issue, severity="blocking")
@@ -1158,6 +1184,13 @@ def run_paper_audit(
     if source_title_check:
         next_actions.extend(source_title_next_actions(source_title_check))
 
+    phase_summary = phase_summary_for_issues(issues)
+    for phase in phase_summary:
+        if phase["phase"] == "source-title" and source_title_check is None:
+            phase["status"] = "not_run"
+        if phase["phase"] == "claim review" and claim_source_check is None and not phase["blocking_count"]:
+            phase["status"] = "not_run"
+
     return {
         "ok": not blocking,
         "tex": str(tex_path),
@@ -1184,7 +1217,7 @@ def run_paper_audit(
         "accepted_provenance_notes": [issue.to_dict() for issue in accepted_provenance_notes],
         "accepted_provenance_summary": summarize_issues(accepted_provenance_notes),
         "next_actions": next_actions,
-        "phase_summary": phase_summary_for_issues(issues),
+        "phase_summary": phase_summary,
         "issue_summary": {
             "blocking": summarize_issues(blocking),
             "warnings": summarize_issues(warnings),

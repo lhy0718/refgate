@@ -344,6 +344,7 @@ def test_paper_audit_accepts_reviewed_source_title_mismatch(tmp_path, capsys):
         encoding="utf-8",
     )
     source = source_dir / "debenedetti2024agentdojo.txt"
+    tex.write_text(r"Refgate verifies references. \cite{debenedetti2024agentdojo}", encoding="utf-8")
     observed_title = "Securing Large Language Model Agents via Structured Graph Abstraction"
     expected_title = "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents"
     source.write_text(

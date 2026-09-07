@@ -121,9 +121,12 @@ def run_claim_source_check(
     suggestions: list[dict[str, Any]] = []
 
     for row in rows:
+        keys = _row_citation_keys(row.get("citation_key", ""))
+        # Reviewed evidence does not waive source availability. Check each key,
+        # including partially mapped multi-citation rows, before skipping review.
+        missing_source_keys.update(key for key in keys if not source_map.get(key))
         if row.get("quote_or_evidence", "").strip():
             continue
-        keys = _row_citation_keys(row.get("citation_key", ""))
         available_sources = [source for key in keys for source in source_map.get(key, [])]
         if not available_sources:
             missing_source_keys.update(keys)

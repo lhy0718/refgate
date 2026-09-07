@@ -42,11 +42,10 @@
 
 - No claim issues reported
 
-## Submission Checklist
+## Gate Scope and Author Review
 
-- [x] Blocking issue count is zero.
-- [ ] Every citation key has a lockfile entry.
-- [ ] Official BibTeX export entries use `official_export`.
-- [ ] Manual fallback entries include fallback reason and field checks.
-- [ ] arXiv fallback entries include version and accessed date.
-- [ ] Important claims have source locations and evidence spans.
+- Blocking issues reported: 0.
+- Phase results above cover only the checks executed by this command.
+- A clear deterministic gate does not certify semantic support or submission readiness.
+- Author review remains necessary for compound claims, source-version equivalence,
+  follow-on assertions, and data or repository dependencies without citations.

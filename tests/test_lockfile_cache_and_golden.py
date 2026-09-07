@@ -77,3 +77,12 @@ def test_blocking_claim_audit_matches_golden():
     }
 
     assert result == json.loads((GOLDEN / "blocking_claim_audit.json").read_text(encoding="utf-8"))
+
+
+def test_report_does_not_present_static_checkboxes_as_gate_results():
+    lockfile = Lockfile.from_dict(json.loads((FIXTURES / "refgate.lock.json").read_text(encoding="utf-8")))
+    report = render_markdown_report(lockfile, [])
+    assert "Blocking issues reported: 0." in report
+    assert "does not certify semantic support or submission readiness" in report
+    assert "- [ ]" not in report
+    assert "- [x]" not in report
