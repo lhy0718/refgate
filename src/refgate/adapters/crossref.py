@@ -27,10 +27,17 @@ def _first(value: Any) -> Any:
 
 
 def _year(message: dict[str, Any]) -> int | None:
+    # Crossref sends "date-parts": [[null]] when a date is unknown; skip those
+    # and fall through to the next date field instead of raising.
     for key in ("published-print", "published-online", "published", "issued"):
-        parts = message.get(key, {}).get("date-parts")
-        if parts and parts[0]:
+        field = message.get(key)
+        parts = field.get("date-parts") if isinstance(field, dict) else None
+        if not parts or not isinstance(parts[0], list) or not parts[0]:
+            continue
+        try:
             return int(parts[0][0])
+        except (TypeError, ValueError):
+            continue
     return None
 
 

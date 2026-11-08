@@ -34,6 +34,41 @@ def test_crossref_doi_lookup_returns_doi_authority_candidate():
     assert authority.record_type == "doi_metadata"
 
 
+def test_crossref_title_search_tolerates_null_date_parts():
+    # Crossref returns "date-parts": [[null]] for works without a known date.
+    # One such item must not abort the whole search (it used to raise TypeError).
+    title = "Refgate Fixture: Null Date Parts"
+    payload = {
+        "message": {
+            "items": [
+                {
+                    "DOI": "10.5555/refgate.nulldate",
+                    "title": [title],
+                    "published-print": {"date-parts": [[None]]},
+                    "issued": {"date-parts": [[2025, 4]]},
+                },
+                {
+                    "DOI": "10.5555/refgate.nodate",
+                    "title": [title],
+                    "published": {"date-parts": [[None]]},
+                    "issued": {"date-parts": [[None]]},
+                },
+            ]
+        }
+    }
+    adapter = CrossrefAdapter(fetcher=lambda _url: json.dumps(payload))
+    query = PaperQuery(query_id="crossref-null-date", title=title, authors=[], year=None)
+
+    candidates = adapter.discover(query)
+
+    assert [candidate.doi for candidate in candidates] == [
+        "10.5555/refgate.nulldate",
+        "10.5555/refgate.nodate",
+    ]
+    assert candidates[0].year == 2025
+    assert candidates[1].year is None
+
+
 def test_semantic_scholar_is_discovery_only():
     adapter = SemanticScholarAdapter(fetcher=lambda _url: load_text("semantic_scholar_search.json"))
     query = PaperQuery(query_id="s2-fixture", title="Refgate Fixture: Discovery Only Record")
