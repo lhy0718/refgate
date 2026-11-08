@@ -48,6 +48,12 @@ def test_codex_plugin_skill_is_public_and_cli_first():
 
     assert "Refgate is CLI-first" in text
     assert "Do not invent an MCP or server workflow" in text
-    assert "Live network checks are opt-in only." in text
+    assert "## Request Scope and Publication Refresh" in text
+    assert "Live network checks require authorization from the conversation" in text
+    assert "A bare run remains offline by default." in text
+    assert "they do not grant permission" in text
+    for outcome in ("OFFICIAL_RECORD_FOUND", "NO_MATCH_IN_CHECKED_SOURCES",
+                    "LOOKUP_FAILED", "NOT_RUN"):
+        assert outcome in text
     assert "Abstracts, summaries, and metadata snippets are weak evidence only" in text
     assert "SOURCE_TITLE_MISMATCH" not in text

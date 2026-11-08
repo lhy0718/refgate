@@ -31,11 +31,12 @@ source of truth. Do not invent an MCP or server workflow for core verification.
 3. Run the one-command triage pass for ordinary paper repositories.
 4. Read the generated audit report, claim table, resolver queries, and next
    plan before editing bibliography or claim artifacts.
-5. Execute only deterministic follow-up commands that are already allowed by
-   the user's request and action metadata.
-6. Stop at opt-in gates for live network checks, source downloads, final claim
-   approval, and manuscript or BibTeX edits unless the user explicitly requests
-   that step.
+5. Determine the authorized scope from the full conversation using the request
+   scope rules below, then run the relevant follow-up commands.
+6. Public official-record lookup is included in a request to complete citation
+   verification or resolve publication-status warnings. Keep source downloads,
+   final claim approval, and manuscript/BibTeX edits within their own authorized
+   scope; do not ask again for actions already authorized.
 7. Report `ok=false` as "audit completed with blockers" when artifacts were
    generated successfully; do not call it a command failure.
 
@@ -73,8 +74,10 @@ the executable verification engine.
 3. Read `ok`, `blocking_issues`, `warnings`,
    `accepted_provenance_notes`, and `next_actions` from JSON output before
    editing bibliography or claim artifacts.
-4. Execute only deterministic follow-up commands that are allowed by the user's
-   request and action metadata. Network work requires explicit opt-in.
+4. Execute follow-up commands allowed by the full user request and action
+   metadata. A request to finish citation verification or resolve remaining
+   publication warnings supplies the opt-in for relevant public official-record
+   lookup; it need not name `--live` or the CLI subcommand.
 5. If a command returns `ok=false`, report the blocker and continue the
    correction loop only when the next action is safe and scoped.
 6. Treat `warnings` as unresolved review work. Treat
@@ -99,9 +102,11 @@ deterministic triage loop:
 4. Report the generated files, phase statuses, blockers, warnings,
    `accepted_provenance_notes`, and recommended next action.
 
-This default loop may create Refgate audit artifacts inside the manuscript
-repository, but it must not use the network, download sources, mark claims as
-checked, or rewrite manuscript/BibTeX files.
+For a bare run request with no broader authorization in the conversation, this
+default loop may create Refgate audit artifacts but does not use the network,
+download sources, mark claims checked, or rewrite manuscript/BibTeX files.
+For a completion or warning-resolution request, continue with the authorized
+lookup after triage; stopping at offline PASS does not complete that request.
 
 Example:
 
@@ -153,19 +158,65 @@ Do not run these steps as part of the default triage pass:
 - direct edits to `main.tex`, `references.bib`, source maps, or lockfile
   provenance fields beyond the explicitly requested Refgate artifact creation.
 
-Run them only when the user explicitly asks for that class of work or when the
-current action metadata is ready and the required allow flags are intentionally
-set:
+Determine authorization using the request scope rules below. Action metadata
+and allow flags describe execution requirements; they do not grant permission
+by themselves. Set only the flags needed for the authorized operation:
 
 ```bash
 refgate run-next --from .refgate/next_plan.json --command-field reference_check_command --allow-writes --allow-review --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
 refgate run-next --from .refgate/next_plan.json --command-field live_reference_check_command --allow-network --allow-writes --allow-review --max-actions 1 --execute --write-run-log .refgate/next_run_log.json --json
 ```
 
-When applying Refgate findings to manuscript prose or BibTeX, first propose the
-exact changes or patch scope, then edit only after the user has requested
-application. After any edit, rerun `latexmk`, `pdftotext`, Refgate audit, and
-layout/log checks appropriate to the paper.
+When applying Refgate findings to manuscript prose or BibTeX, identify the
+exact changes and their official evidence. Apply them when the conversation
+already authorizes correction; do not request the same authorization again.
+For verification-only requests, report the concrete proposed edit separately.
+After an edit, rerun `latexmk`, `pdftotext`, Refgate audit, and layout/log checks
+appropriate to the paper.
+
+## Request Scope and Publication Refresh
+
+Use the full conversation, including earlier permissions and explicit offline
+constraints. Apply these examples by intent, not by exact keyword matching:
+
+| Request | Authorized default |
+| --- | --- |
+| Run Refgate / RefGate 실행 | Offline triage, unless earlier context already authorizes more. Explicitly report live checks not run. |
+| Complete citation verification / 인용 검증 완료 | Triage plus the public official-record lookups needed to finish reference verification. |
+| Resolve remaining publication warnings / 남은 경고 해결 | Look up the flagged records online; do not stop at an offline monitoring plan. |
+| Check latest publication information / 최신 출판 정보 확인 | Query relevant public official records and report the evidence and date. |
+| Fix or update the bibliography / 서지 수정 | Lookup and apply evidence-backed bibliographic corrections within the requested scope. |
+| Offline only / 온라인 조회 금지 | Keep the entire run offline and report which publication-status questions remain unresolved. |
+
+A request to explain a warning or discuss a skill is not itself an execution
+request. Tool-code repair alone does not imply permission to change a paper's
+bibliography. Lookup authorization covers the necessary public bibliographic
+queries and local result/cache logs, not uploading private manuscript text,
+paid services, final claim approval, or unrelated bulk source downloads.
+
+For each flagged arXiv entry, check the available official arXiv record and
+relevant venue/publisher or DOI records. Verify title, authors, identifiers,
+version relationship, and official BibTeX provenance before proposing promotion
+to a published record. A metadata match or search hit alone is not an official
+BibTeX export and does not establish full-text equivalence.
+
+Record the citation key, checked date, sources/queries, URLs or cache references,
+and outcome. Use these reporting labels (not invented CLI response fields):
+
+- `OFFICIAL_RECORD_FOUND`: a matching official publication record was verified;
+  report BibTeX export verification separately.
+- `NO_MATCH_IN_CHECKED_SOURCES`: the named sources were successfully queried but
+  yielded no verified publication match. Keep the arXiv reference; do not claim
+  that no publication exists outside that search scope.
+- `LOOKUP_FAILED`: timeout, access restriction, rate limit, or another failed
+  query prevented verification. Record any successful partial checks separately.
+- `NOT_RUN`: no live lookup was performed.
+
+For conflicting or ambiguous candidates, retain the arXiv record and explain
+what remains unverified rather than forcing a match. Never suppress a warning
+merely to obtain a clean report. If the engine still emits a monitoring warning
+after a successful no-match lookup, retain it and report the bounded lookup
+result separately. A reviewed title exception is not an unresolved BibTeX error.
 
 ## Generic Paper Bootstrap
 
@@ -401,7 +452,9 @@ Use `next_actions` as the handoff contract. Common action kinds:
   not make a claim `checked`.
 - Title-like or abstract-like evidence candidates are review hints; prefer
   fuller body passages for support decisions.
-- Live network checks are opt-in only.
+- Live network checks require authorization from the conversation; completion
+  and warning-resolution requests include scoped public official-record lookup
+  under the request scope rules. A bare run remains offline by default.
 - Evidence suggestions may include PDF page labels, but they still require
   source-evidence review before a claim is marked checked.
 - Official BibTeX is matched by citation-key filename first and exact normalized
@@ -440,7 +493,11 @@ plain text hygiene scan before finalizing.
 
 - Treating `ok=false` from a successful `paper-audit` as a shell failure rather
   than a blocker report.
-- Running live lookup or source downloads without explicit opt-in.
+- Running live lookup or source downloads outside the authorized scope.
+- Treating a bare-run default as a reason to stop a broader verification or
+  warning-resolution request before the necessary official-record lookup.
+- Treating lookup failure or no match as proof that no published version exists.
+- Using an offline PASS or a completed monitoring plan to claim live refresh.
 - Marking claims checked from abstracts, summaries, metadata, or title-like
   snippets.
 - Labeling generated or manually normalized BibTeX as an official export.
