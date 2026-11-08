@@ -688,6 +688,7 @@ def test_cli_paper_audit_can_build_source_map_from_citation_key_files(tmp_path, 
     assert rows[0]["status"] == "needs_review"
     assert rows[0]["source_location"].startswith("sources/debenedetti2024agentdojo.txt: ")
     assert "sources/debenedetti2024agentdojo.txt" in source_map_text
+    assert b"\r\n" not in source_map.read_bytes()
     assert str(tmp_path) not in source_map_text
     assert "## Source-Check Summary" in claim_review.read_text(encoding="utf-8")
     report_text = report.read_text(encoding="utf-8")
@@ -870,6 +871,7 @@ def test_cli_paper_audit_claim_review_summarizes_no_match_sources(tmp_path, caps
     review = claim_review.read_text(encoding="utf-8")
     assert exit_code == 1
     assert any(issue["code"] == "CLAIM_EVIDENCE_NOT_FOUND_IN_SOURCE" for issue in payload["blocking_issues"])
+    assert b"\r\n" not in claims.read_bytes()
     assert payload["data"]["claim_source_check"]["updated"] == 0
     assert payload["data"]["claim_source_check"]["no_match_claims"][0]["claim_id"] == "claim-0001"
     no_match_action = next(action for action in payload["next_actions"] if action["code"] == "REVIEW_NO_MATCH_CLAIMS")

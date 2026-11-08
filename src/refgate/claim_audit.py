@@ -312,7 +312,13 @@ def write_claim_rows(path: str | Path, rows: list[dict[str, str]]) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, delimiter="\t", fieldnames=CLAIM_COLUMNS, extrasaction="ignore")
+        writer = csv.DictWriter(
+            handle,
+            delimiter="\t",
+            fieldnames=CLAIM_COLUMNS,
+            extrasaction="ignore",
+            lineterminator="\n",
+        )
         writer.writeheader()
         for row in rows:
             writer.writerow({column: row.get(column, "") for column in CLAIM_COLUMNS})

@@ -237,7 +237,12 @@ def build_source_map_from_dir(
 
     output_target.parent.mkdir(parents=True, exist_ok=True)
     with output_target.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, delimiter="\t", fieldnames=SOURCE_MAP_COLUMNS)
+        writer = csv.DictWriter(
+            handle,
+            delimiter="\t",
+            fieldnames=SOURCE_MAP_COLUMNS,
+            lineterminator="\n",
+        )
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
