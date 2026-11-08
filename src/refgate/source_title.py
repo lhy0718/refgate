@@ -158,6 +158,7 @@ def source_title_candidates(text: str) -> list[str]:
 
 
 def _compact_title(title: str) -> str:
+    title = re.sub(r"\\(?:text)?(?:left|right)?arrow\b", "", title)
     text = normalize_title(title)
     text = re.sub(r"(?i)\\tau\b", "tau", text)
     text = text.replace("τ", "tau")

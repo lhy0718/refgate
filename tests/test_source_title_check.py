@@ -404,3 +404,16 @@ def test_paper_audit_accepts_reviewed_source_title_mismatch(tmp_path, capsys):
     report_text = report.read_text(encoding="utf-8")
     assert "### Reviewed Mismatches" in report_text
     assert observed_title in report_text
+
+
+def test_source_title_matches_tex_arrow_macro_to_rendered_arrow():
+    expected = (
+        "Can {AI} Validate Science? Benchmarking {LLM}s on "
+        "Claim {\\textrightarrow}{E}vidence Reasoning in {AI} Papers"
+    )
+    rendered = (
+        "Can AI Validate Science? Benchmarking LLMs on "
+        "Claim \N{RIGHTWARDS ARROW} Evidence Reasoning in AI Papers"
+    )
+
+    assert source_title_matches(expected, [rendered])
